@@ -255,26 +255,21 @@ window.CONFIG = {
       category: 'Social',
       name: 'Snapchat',
       triggers: [
-        'sc',
+        'p',
+		'sp',
         'snap',
-        'snapchat'
+        'snapchat',
       ],
-      key: 'KeySC',
-      icon: 'snapchat',
-      url: 'https://snapchat.com',
+      key: 'KeyP',
+      icon: 'Snapchat',
+      url: 'https://www.snapchat.com',
       normalisedURL: 'snapchat.com',
-      commands: {
-        go: {
-          template: '{@}/{$}',
-          description: 'go to user'
-        }
-      },
       bgColor: {
         type: 'gradient',
         gradientType: 'radial',
         angle: 'circle at 30% 107%',
-        colors: ['#fdf497', '#fdf497'],
-        stops: [45, 60]
+        colors: ['#fdf497', '#505'],
+        stops: [0, 100]
       },
       textColor: '#e8e8e8',
       pinned: true
