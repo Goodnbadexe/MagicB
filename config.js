@@ -251,6 +251,34 @@ window.CONFIG = {
       textColor: '#e8e8e8',
       pinned: true
     },
+	  {
+      category: 'Social',
+      name: 'Snapchat',
+      triggers: [
+        'sc',
+        'snap',
+        'snapchat'
+      ],
+      key: 'KeySC',
+      icon: 'snapchat',
+      url: 'https://snapchat.com',
+      normalisedURL: 'snapchat.com',
+      commands: {
+        go: {
+          template: '{@}/{$}',
+          description: 'go to user'
+        }
+      },
+      bgColor: {
+        type: 'gradient',
+        gradientType: 'radial',
+        angle: 'circle at 30% 107%',
+        colors: ['#fdf497', '#fdf497'],
+        stops: [45, 60]
+      },
+      textColor: '#e8e8e8',
+      pinned: true
+    },
     {
       category: 'Music',
       name: 'spotify',
@@ -351,13 +379,13 @@ window.CONFIG = {
     },
     {
       category: 'Social',
-      name: 'Twitter',
-      icon: 'twitter',
+      name: 'X',
+      icon: 'X',
       url: 'https://twitter.com',
       normalisedURL: 'twitter.com',
       triggers: [
+        'x',
         'tt',
-        'twt',
         'twit',
         'twitt',
         'twitter'
