@@ -27,7 +27,16 @@ function App() {
       // Save the key
       import('./services/AiService').then(({ AiService }) => {
         AiService.setKey(cmd.key);
-        alert("API Key Saved! You can now use AI generation.");
+        // Show success message with animation
+        const notification = document.createElement('div');
+        notification.textContent = "✓ API Key Saved! You can now use AI generation.";
+        notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
+        notification.style.animation = 'fadeIn 0.3s ease-in';
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          notification.style.animation = 'fadeOut 0.3s ease-out';
+          setTimeout(() => document.body.removeChild(notification), 300);
+        }, 3000);
       });
     }
   };

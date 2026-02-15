@@ -152,12 +152,20 @@ export async function generateHtml(prompt) {
             console.log("Generating with AI...");
             const aiHtml = await AiService.generateWebsite(prompt, analysis);
             
-            // Cache the result
-            saveCachedHtml(cacheKey, aiHtml);
-            
-            return aiHtml;
+            // Validate HTML before caching
+            if (aiHtml && aiHtml.trim().length > 0 && aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html')) {
+                // Cache the result
+                saveCachedHtml(cacheKey, aiHtml);
+                return aiHtml;
+            } else {
+                console.warn("AI returned invalid HTML, falling back to parametric");
+            }
         } catch (e) {
             console.error("AI Generation failed, falling back to parametric engine", e);
+            // Show user-friendly error notification
+            if (e.message && !e.message.includes('No API Key')) {
+                console.warn("AI error:", e.message);
+            }
             // Fallthrough to parametric if AI fails
         }
     }

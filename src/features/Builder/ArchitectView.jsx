@@ -2,11 +2,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { generateHtml } from './HtmlGenerator.jsx';
-import { Loader2, CheckCircle2, Layout, ScanSearch, Code2, Lock } from 'lucide-react';
+import { Loader2, CheckCircle2, Layout, ScanSearch, Code2, Lock, Download, Copy, ExternalLink, Share2 } from 'lucide-react';
 import { detectLanguage } from '../../core/LanguageDetector';
 import { t } from '../../core/i18n';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import WebsiteBreakdown from './WebsiteBreakdown';
+import { downloadHTML, copyToClipboard, openInNewWindow } from '../../utils/exportUtils';
 
 const STEPS_CONFIG = [
     { key: 'analyzing', icon: ScanSearch, time: 2000 },
@@ -19,6 +20,7 @@ export default function ArchitectView({ query, onBack }) {
     const [currentStep, setCurrentStep] = useState(0);
     const [html, setHtml] = useState('');
     const [analysis, setAnalysis] = useState(null);
+    const [exportStatus, setExportStatus] = useState(null);
 
     const language = detectLanguage(query);
     const lang = language.code;
@@ -70,6 +72,43 @@ export default function ArchitectView({ query, onBack }) {
                         >
                             {t(lang, 'ui.newPrompt', 'New Prompt')}
                         </button>
+                        {html && (
+                            <>
+                                <button
+                                    className="text-xs bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700 transition-colors shadow-sm"
+                                    onClick={async () => {
+                                        const success = await copyToClipboard(html);
+                                        setExportStatus(success ? 'copied' : 'error');
+                                        setTimeout(() => setExportStatus(null), 2000);
+                                    }}
+                                    title={t(lang, 'ui.copyCode', 'Copy HTML')}
+                                >
+                                    <Copy size={10} />
+                                    {exportStatus === 'copied' ? t(lang, 'ui.copied', 'Copied!') : t(lang, 'ui.copy', 'Copy')}
+                                </button>
+                                <button
+                                    className="text-xs bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-green-700 transition-colors shadow-sm"
+                                    onClick={() => {
+                                        const filename = analysis?.title || 'website';
+                                        downloadHTML(html, filename);
+                                        setExportStatus('downloaded');
+                                        setTimeout(() => setExportStatus(null), 2000);
+                                    }}
+                                    title={t(lang, 'ui.download', 'Download HTML')}
+                                >
+                                    <Download size={10} />
+                                    {t(lang, 'ui.download', 'Download')}
+                                </button>
+                                <button
+                                    className="text-xs bg-purple-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-purple-700 transition-colors shadow-sm"
+                                    onClick={() => openInNewWindow(html)}
+                                    title={t(lang, 'ui.openNewWindow', 'Open in New Window')}
+                                >
+                                    <ExternalLink size={10} />
+                                    {t(lang, 'ui.open', 'Open')}
+                                </button>
+                            </>
+                        )}
                         <button
                             className="text-xs bg-black text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-gray-800 transition-colors shadow-sm"
                             onClick={() => alert("Upgrade to PRO to publish your site!")}

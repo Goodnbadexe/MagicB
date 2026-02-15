@@ -35,7 +35,13 @@ const translations = {
             theme: 'Theme',
             sections: 'Sections',
             breakdown: 'Website Breakdown',
-            includedSections: 'Included Sections'
+            includedSections: 'Included Sections',
+            copy: 'Copy',
+            copied: 'Copied!',
+            download: 'Download',
+            open: 'Open',
+            copyCode: 'Copy HTML',
+            openNewWindow: 'Open in New Window'
         },
         content: {
             defaultTitle: 'My New Website',
@@ -79,7 +85,13 @@ const translations = {
             theme: 'المظهر',
             sections: 'الأقسام',
             breakdown: 'تحليل الموقع',
-            includedSections: 'الأقسام المضمنة'
+            includedSections: 'الأقسام المضمنة',
+            copy: 'نسخ',
+            copied: 'تم النسخ!',
+            download: 'تحميل',
+            open: 'فتح',
+            copyCode: 'نسخ HTML',
+            openNewWindow: 'فتح في نافذة جديدة'
         },
         content: {
             defaultTitle: 'موقعك الجديد',
@@ -123,7 +135,13 @@ const translations = {
             theme: '主题',
             sections: '部分',
             breakdown: '网站分析',
-            includedSections: '包含的部分'
+            includedSections: '包含的部分',
+            copy: '复制',
+            copied: '已复制!',
+            download: '下载',
+            open: '打开',
+            copyCode: '复制 HTML',
+            openNewWindow: '在新窗口打开'
         },
         content: {
             defaultTitle: '我的新网站',
@@ -160,7 +178,20 @@ const translations = {
             name: 'Nombre',
             email: 'Correo electrónico',
             message: 'Mensaje',
-            send: 'Enviar'
+            send: 'Enviar',
+            language: 'Idioma',
+            category: 'Categoría',
+            template: 'Plantilla',
+            theme: 'Tema',
+            sections: 'Secciones',
+            breakdown: 'Análisis del Sitio',
+            includedSections: 'Secciones Incluidas',
+            copy: 'Copiar',
+            copied: '¡Copiado!',
+            download: 'Descargar',
+            open: 'Abrir',
+            copyCode: 'Copiar HTML',
+            openNewWindow: 'Abrir en Nueva Ventana'
         },
         content: {
             defaultTitle: 'Mi Nuevo Sitio Web',
@@ -248,7 +279,13 @@ const translations = {
             theme: 'Thema',
             sections: 'Abschnitte',
             breakdown: 'Website-Analyse',
-            includedSections: 'Enthaltene Abschnitte'
+            includedSections: 'Enthaltene Abschnitte',
+            copy: 'Kopieren',
+            copied: 'Kopiert!',
+            download: 'Herunterladen',
+            open: 'Öffnen',
+            copyCode: 'HTML Kopieren',
+            openNewWindow: 'In Neuem Fenster Öffnen'
         },
         content: {
             defaultTitle: 'Meine Neue Website',
@@ -292,7 +329,13 @@ const translations = {
             theme: 'テーマ',
             sections: 'セクション',
             breakdown: 'ウェブサイト分析',
-            includedSections: '含まれるセクション'
+            includedSections: '含まれるセクション',
+            copy: 'コピー',
+            copied: 'コピーしました!',
+            download: 'ダウンロード',
+            open: '開く',
+            copyCode: 'HTMLをコピー',
+            openNewWindow: '新しいウィンドウで開く'
         },
         content: {
             defaultTitle: '私の新しいウェブサイト',
@@ -336,7 +379,13 @@ const translations = {
             theme: '테마',
             sections: '섹션',
             breakdown: '웹사이트 분석',
-            includedSections: '포함된 섹션'
+            includedSections: '포함된 섹션',
+            copy: '복사',
+            copied: '복사됨!',
+            download: '다운로드',
+            open: '열기',
+            copyCode: 'HTML 복사',
+            openNewWindow: '새 창에서 열기'
         },
         content: {
             defaultTitle: '내 새 웹사이트',
@@ -380,7 +429,13 @@ const translations = {
             theme: 'Тема',
             sections: 'Разделы',
             breakdown: 'Анализ Сайта',
-            includedSections: 'Включенные Разделы'
+            includedSections: 'Включенные Разделы',
+            copy: 'Копировать',
+            copied: 'Скопировано!',
+            download: 'Скачать',
+            open: 'Открыть',
+            copyCode: 'Копировать HTML',
+            openNewWindow: 'Открыть в Новом Окне'
         },
         content: {
             defaultTitle: 'Мой Новый Сайт',
