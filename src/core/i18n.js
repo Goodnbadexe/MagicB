@@ -472,7 +472,15 @@ const translations = {
             name: 'Nome',
             email: 'Email',
             message: 'Mensagem',
-            send: 'Enviar'
+            send: 'Enviar',
+            breakdown: 'Análise do Site',
+            includedSections: 'Seções Incluídas',
+            copy: 'Copiar',
+            copied: 'Copiado!',
+            download: 'Baixar',
+            open: 'Abrir',
+            copyCode: 'Copiar HTML',
+            openNewWindow: 'Abrir em Nova Janela'
         },
         content: {
             defaultTitle: 'Meu Novo Site',
