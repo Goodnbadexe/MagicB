@@ -30,53 +30,75 @@ export function getThemeClasses(theme, colors) {
  * @param {Object} theme - Theme object
  * @returns {string}
  */
-export function generateThemeStyles(colors, theme) {
-    const primaryColor = colors.primary;
-    const isDark = theme.all.includes('dark');
-    
-    return `
-        :root {
-            --primary-color: ${primaryColor};
-            --primary-rgb: ${hexToRgb(primaryColor)};
-        }
-        .glass {
-            background: rgba(255, 255, 255, ${isDark ? '0.05' : '0.1'});
-            backdrop-filter: blur(10px);
-        }
-        .pattern {
-            background-image: radial-gradient(${primaryColor}22 1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-        .gradient-primary {
-            background: linear-gradient(135deg, ${primaryColor}, ${adjustBrightness(primaryColor, -20)});
-        }
-    `;
-}
-
-/**
- * Convert hex color to RGB
- * @param {string} hex - Hex color code
- * @returns {string}
- */
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result
-        ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-        : '37, 99, 235';
-}
-
 /**
  * Adjust brightness of a color
  * @param {string} hex - Hex color code
  * @param {number} percent - Percentage to adjust (-100 to 100)
  * @returns {string}
  */
-function adjustBrightness(hex, percent) {
-    const num = parseInt(hex.replace('#', ''), 16);
+export function adjustBrightness(hex, percent) {
+    let c = hex.replace('#', '');
+    if (c.length === 3) {
+        c = c.split('').map(char => char + char).join('');
+    }
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return hex; // Fallback
+
     const r = Math.min(255, Math.max(0, (num >> 16) + percent));
     const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
     const b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+/**
+ * Generate CSS variables for the theme
+ */
+export function generateThemeStyles(colors, theme) {
+    const primaryColor = colors.primary;
+    const isDark = theme.all.includes('dark');
+    const rgb = hexToRgb(primaryColor);
+
+    return `
+        :root {
+            --primary-color: ${primaryColor};
+            --primary-rgb: ${rgb};
+            --bg-opacity: ${isDark ? '0.05' : '0.1'};
+        }
+        .glass {
+            background: rgba(255, 255, 255, var(--bg-opacity));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .pattern {
+            background-image: radial-gradient(rgba(var(--primary-rgb), 0.15) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .gradient-primary {
+            background: linear-gradient(135deg, ${primaryColor}, ${adjustBrightness(primaryColor, -20)});
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, ${primaryColor}, ${adjustBrightness(primaryColor, 30)});
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    `;
+}
+
+/**
+ * Convert hex color to RGB
+ * Handles #abc, #aabbcc, and missing hash
+ */
+export function hexToRgb(hex) {
+    let c = hex.replace('#', '');
+    if (c.length === 3) {
+        c = c.split('').map(char => char + char).join('');
+    }
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return '59, 130, 246'; // Default blue
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `${r}, ${g}, ${b}`;
 }
 
 /**
@@ -106,7 +128,7 @@ export function getMacroStyle(macro) {
     if (bgColor.type === 'gradient') {
         const colors = bgColor.colors || [];
         const stops = bgColor.stops || [];
-        
+
         if (bgColor.gradientType === 'radial') {
             return {
                 background: `radial-gradient(circle at ${bgColor.stops?.[0] || 60}%, ${colors.join(', ')})`,

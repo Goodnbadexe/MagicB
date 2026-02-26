@@ -229,13 +229,14 @@ function extractContentHints(prompt, lower, langCode) {
         hasContact,
         hasAbout,
         hasServices,
-        sections: {
-            hero: true,
-            features: hasServices,
-            about: hasAbout,
-            contact: hasContact,
-            footer: true
-        }
+        hasServices,
+        sections: [
+            'hero',
+            hasServices ? 'features' : null,
+            hasAbout ? 'about' : null,
+            hasContact ? 'contact' : null,
+            'footer'
+        ].filter(Boolean)
     };
 }
 
@@ -293,7 +294,7 @@ function extractRequirements(prompt, lower) {
 function extractKeywords(prompt) {
     // Remove common stop words and extract meaningful keywords
     const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'build', 'create', 'make', 'generate', 'design', 'website', 'site', 'page'];
-    
+
     const words = prompt.toLowerCase()
         .replace(/[^\w\s\u0600-\u06FF]/g, ' ')
         .split(/\s+/)
@@ -312,7 +313,7 @@ function getDefaultAnalysis() {
         theme: { primary: 'modern', all: ['modern'] },
         layout: { centered: true }
     });
-    
+
     return {
         original: '',
         language: { code: 'en', name: 'English', nativeName: 'English', dir: 'ltr', font: 'Inter, Outfit, Arial', isRTL: false },
@@ -326,7 +327,8 @@ function getDefaultAnalysis() {
             hasContact: false,
             hasAbout: false,
             hasServices: false,
-            sections: { hero: true, features: true, about: false, contact: false, footer: true }
+            hasServices: false,
+            sections: ['hero', 'features', 'footer']
         },
         layout: { grid: false, list: false, sidebar: false, fullwidth: false, centered: true },
         requirements: [],

@@ -4,12 +4,14 @@ import CommandBar from './components/CommandBar';
 import { COMMAND_Types } from './core/CommandParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import ArchitectView from './features/Builder/ArchitectView';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Settings } from 'lucide-react';
+import ApiKeyModal from './components/ApiKeyModal';
 
 function App() {
   const [mode, setMode] = useState('COMMAND'); // COMMAND | BUILDER
   const [currentQuery, setCurrentQuery] = useState('');
   const [redirect, setRedirect] = useState(null); // { url: string } | null
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleCommand = (cmd) => {
     if (cmd.type === COMMAND_Types.REDIRECT || cmd.type === COMMAND_Types.SEARCH) {
@@ -44,9 +46,9 @@ function App() {
   return (
     <div className="min-h-screen w-full relative flex flex-col items-center justify-center overflow-hidden">
       {/* Background Effects */}
-      <div className="absolute inset-0 z-0 bg-neutral-950">
-        <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] rounded-full bg-purple-900/20 blur-[120px]" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[50%] h-[50%] rounded-full bg-blue-900/20 blur-[120px]" />
+      <div className="absolute inset-0 z-0 bg-black">
+        <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] rounded-full bg-neutral-900/30 blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-20%] w-[50%] h-[50%] rounded-full bg-neutral-900/30 blur-[120px]" />
       </div>
 
       {/* Redirect Overlay */}
@@ -69,6 +71,19 @@ function App() {
         )}
       </AnimatePresence>
 
+      <ApiKeyModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Settings Button */}
+      <button
+        onClick={() => setIsSettingsOpen(true)}
+        className="absolute top-6 right-6 z-40 p-3 bg-white/20 backdrop-blur-md border border-white/30 rounded-full text-white hover:bg-white/30 transition-all group"
+      >
+        <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500" />
+      </button>
+
       {/* Content */}
       <div className="relative z-10 w-full h-full flex flex-row overflow-hidden">
 
@@ -85,10 +100,10 @@ function App() {
           />
 
           {mode === 'COMMAND' && (
-            <div className="mt-12 flex gap-4 text-white/20 text-sm">
-              <span>Press <kbd className="bg-white/10 px-2 py-1 rounded">yt</kbd> for YouTube</span>
+            <div className="mt-12 flex gap-4 text-white text-sm">
+              <span>Press <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">yt</kbd> for YouTube</span>
               <span>•</span>
-              <span>Type <kbd className="bg-white/10 px-2 py-1 rounded">build...</kbd> to create</span>
+              <span>Type <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">build...</kbd> to create</span>
             </div>
           )}
         </motion.div>

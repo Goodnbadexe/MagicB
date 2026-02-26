@@ -30,7 +30,7 @@ function getCachedHtml(cacheKey) {
     try {
         const cached = localStorage.getItem(cacheKey);
         if (!cached) return null;
-        
+
         const data = JSON.parse(cached);
         if (Date.now() - data.timestamp > CACHE_TTL) {
             localStorage.removeItem(cacheKey);
@@ -55,7 +55,7 @@ function saveCachedHtml(cacheKey, html) {
             timestamp: Date.now()
         };
         localStorage.setItem(cacheKey, JSON.stringify(data));
-        
+
         // Clean up old cache entries (keep last 50)
         cleanupCache();
     } catch (e) {
@@ -79,7 +79,7 @@ function cleanupCache() {
     try {
         const keys = Object.keys(localStorage).filter(k => k.startsWith(CACHE_PREFIX));
         if (keys.length <= 50) return;
-        
+
         // Get all entries with timestamps
         const entries = keys.map(key => {
             try {
@@ -89,10 +89,10 @@ function cleanupCache() {
                 return { key, timestamp: 0 };
             }
         });
-        
+
         // Sort by timestamp (newest first)
         entries.sort((a, b) => b.timestamp - a.timestamp);
-        
+
         // Remove oldest entries
         entries.slice(50).forEach(({ key }) => {
             localStorage.removeItem(key);
@@ -109,7 +109,7 @@ function clearOldCache() {
     try {
         const keys = Object.keys(localStorage).filter(k => k.startsWith(CACHE_PREFIX));
         const now = Date.now();
-        
+
         keys.forEach(key => {
             try {
                 const data = JSON.parse(localStorage.getItem(key));
@@ -151,7 +151,7 @@ export async function generateHtml(prompt) {
         try {
             console.log("Generating with AI...");
             const aiHtml = await AiService.generateWebsite(prompt, analysis);
-            
+
             // Validate HTML before caching
             if (aiHtml && aiHtml.trim().length > 0 && aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html')) {
                 // Cache the result
@@ -172,10 +172,10 @@ export async function generateHtml(prompt) {
 
     // Fallback: Parametric Generator
     const html = generateParametricHtml(analysis);
-    
+
     // Cache the result
     saveCachedHtml(cacheKey, html);
-    
+
     return html;
 }
 
@@ -188,22 +188,47 @@ function generateParametricHtml(analysis) {
     const { language, title, theme, colors, category, content, layout, template } = analysis;
     const themeClasses = getThemeClasses(theme, colors);
     const contentTranslations = getContentTranslations(language.code);
-    
+
     // Get title
     const siteTitle = title || contentTranslations.defaultTitle;
-    
+
     // Get hero text
     const heroText = content.heroText || contentTranslations.defaultHero;
     const description = content.description || contentTranslations.defaultDescription;
-    
+
     // Generate theme styles
     const themeStyles = generateThemeStyles(colors, theme);
     const fontFamily = getFontFamily(language);
-    
+
     // Use template sections if available
     const sectionsToInclude = template?.sections || content.sections;
-    
+
     // Build HTML
+    const sectionRenderers = {
+        hero: () => generateHeroSection(heroText, description, colors.primary, language, themeClasses),
+        features: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        services: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        about: () => generateAboutSection(language, themeClasses),
+        contact: () => generateContactSection(language, themeClasses, colors.primary),
+        footer: () => generateFooter(siteTitle, language, themeClasses),
+        // Map other potential sections to existing renderers or placeholders
+        projects: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        testimonials: () => generateAboutSection(language, themeClasses), // Reuse about for now
+        gallery: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        team: () => generateAboutSection(language, themeClasses),
+        menu: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        cta: () => generateContactSection(language, themeClasses, colors.primary)
+    };
+
+    // Filter out sections that don't have renderers to prevent errors
+    const validSections = sectionsToInclude.filter(section => sectionRenderers[section] || sectionRenderers[getFallbackSection(section)]);
+
+    // Generate sections HTML
+    const sectionsHtml = validSections.map(section => {
+        const renderer = sectionRenderers[section] || sectionRenderers[getFallbackSection(section)];
+        return renderer ? renderer() : '';
+    }).join('\n');
+
     return `<!DOCTYPE html>
 <html lang="${language.code}" dir="${language.dir}">
 <head>
@@ -224,23 +249,20 @@ function generateParametricHtml(analysis) {
     <!-- Navigation -->
     ${generateNavigation(siteTitle, colors.primary, language, themeClasses)}
 
-    <!-- Hero Section -->
-    ${generateHeroSection(heroText, description, colors.primary, language, themeClasses)}
-
-    <!-- Features/Services Section -->
-    ${sectionsToInclude.includes('features') || sectionsToInclude.includes('services') ? generateFeaturesSection(language, themeClasses, colors.primary) : ''}
-
-    <!-- About Section -->
-    ${sectionsToInclude.includes('about') ? generateAboutSection(language, themeClasses) : ''}
-
-    <!-- Contact Section -->
-    ${sectionsToInclude.includes('contact') ? generateContactSection(language, themeClasses, colors.primary) : ''}
-
-    <!-- Footer -->
-    ${generateFooter(siteTitle, language, themeClasses)}
+    ${sectionsHtml}
 
 </body>
 </html>`;
+}
+
+/**
+ * Get fallback section type if exact match not found
+ */
+function getFallbackSection(section) {
+    if (['projects', 'gallery', 'portfolio', 'products', 'menu', 'courses', 'destinations'].includes(section)) return 'features';
+    if (['team', 'testimonials', 'story', 'mission', 'history'].includes(section)) return 'about';
+    if (['booking', 'appointment', 'cta', 'newsletter'].includes(section)) return 'contact';
+    return null;
 }
 
 /**
@@ -268,24 +290,32 @@ function generateNavigation(title, primaryColor, language, themeClasses) {
  * Generate hero section HTML
  */
 function generateHeroSection(heroText, description, primaryColor, language, themeClasses) {
+    const heroImage = getImageUrl(heroText.split(' ')[0] + ' minimal' || 'minimal business');
     return `
-    <main class="flex-grow flex flex-col items-center justify-center text-center px-4 mt-10 md:mt-20">
-        <div class="inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-6 border ${themeClasses.border} shadow-sm" style="color: ${primaryColor}; background-color: ${primaryColor}10;">
-            ${t(language.code, 'ui.nextGeneration', 'Next Generation')}
-        </div>
+    <main class="flex-grow flex flex-col md:flex-row items-center justify-between px-6 mt-10 md:mt-20 max-w-7xl mx-auto gap-12">
+        <div class="flex-1 text-center md:text-left">
+            <div class="inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-6 border border-current shadow-sm" style="color: ${primaryColor}; background-color: rgba(var(--primary-rgb), 0.1);">
+                ${t(language.code, 'ui.nextGeneration', 'Next Generation')}
+            </div>
         <h1 class="text-6xl md:text-8xl font-bold mb-8 leading-tight max-w-4xl">
             ${heroText}
         </h1>
         <p class="text-lg md:text-xl opacity-60 max-w-2xl mb-12 leading-relaxed">
             ${description}
         </p>
-        <div class="flex gap-4 flex-wrap justify-center">
+        <div class="flex gap-4 flex-wrap justify-center md:justify-start">
             <button class="px-8 py-4 rounded-full font-bold text-white shadow-lg transform hover:-translate-y-1 transition-all" style="background-color: ${primaryColor};">
                 ${t(language.code, 'ui.getStarted', 'Get Started')}
             </button>
-            <button class="px-8 py-4 rounded-full font-bold border ${themeClasses.border} hover:bg-opacity-10 transition-all" style="border-color: ${primaryColor}; color: ${primaryColor};">
+            <button class="px-8 py-4 rounded-full font-bold border hover:bg-opacity-10 transition-all" style="border-color: ${primaryColor}; color: ${primaryColor};">
                 ${t(language.code, 'ui.learnMore', 'Learn More')}
             </button>
+        </div>
+        </div>
+        </div>
+        <div class="flex-1 relative w-full aspect-video md:aspect-square max-h-[500px] rounded-3xl overflow-hidden shadow-2xl transform rotate-1 hover:rotate-0 transition-all duration-700" style="-webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%); mask-image: linear-gradient(to bottom, black 80%, transparent 100%);">
+            <img src="${heroImage}" alt="Hero" class="w-full h-full object-cover" />
+            <div class="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent"></div>
         </div>
     </main>`;
 }
@@ -298,8 +328,13 @@ function generateFeaturesSection(language, themeClasses, primaryColor) {
     return `
     <section class="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-3 gap-8" id="work">
         ${features.map(i => `
-        <div class="${themeClasses.cardBg} p-8 rounded-3xl border ${themeClasses.border} hover:border-opacity-50 transition-all group cursor-pointer shadow-sm hover:shadow-md" style="border-color: ${primaryColor}40;">
-            <div class="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center text-white text-xl" style="background-color: ${primaryColor};">
+        <div class="${themeClasses.cardBg} p-0 rounded-3xl border ${themeClasses.border} hover:border-opacity-50 transition-all group cursor-pointer shadow-sm hover:shadow-xl overflow-hidden" style="border-color: rgba(var(--primary-rgb), 0.2);">
+            <div class="h-48 overflow-hidden relative" style="-webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%); mask-image: linear-gradient(to bottom, black 50%, transparent 100%);">
+                <img src="${getImageUrl('service ' + i + ' minimal')}" alt="Service ${i}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
+                <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+            </div>
+            <div class="p-8">
+            <div class="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center text-white text-xl shadow-lg transform -translate-y-14 group-hover:-translate-y-16 transition-transform" style="background-color: ${primaryColor};">
                 ${i}
             </div>
             <h3 class="text-2xl font-bold mb-4">${t(language.code, 'ui.premiumService', 'Premium Service')} ${i}</h3>
@@ -376,7 +411,7 @@ function getFontLink(language) {
         hi: '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@300;400;700&display=swap" rel="stylesheet">',
         th: '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;700&display=swap" rel="stylesheet">'
     };
-    
+
     return fontLinks[language.code] || '';
 }
 
@@ -397,4 +432,15 @@ export function clearCache() {
     } catch (e) {
         console.error('Clear cache error:', e);
     }
+}
+
+/**
+ * Get a placeholder image URL
+ * Uses Unsplash Source (deprecated but still works sometimes) or a reliable placeholder service
+ */
+function getImageUrl(keyword) {
+    // Using a reliable placeholder service that supports keywords
+    // We append a random timestamp to prevent caching issues if needed, but for identical keywords we might want caching.
+    // Let's use standard unsplash source format or similar.
+    return `https://source.unsplash.com/800x600/?${encodeURIComponent(keyword)}`;
 }

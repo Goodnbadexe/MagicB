@@ -120,6 +120,7 @@ export const MACROS = [
         triggers: [
             'g',
             'git',
+            'gh',
             'github'
         ],
         key: 'KeyG',
@@ -628,6 +629,71 @@ export const MACROS = [
             color: '#fc3f1d'
         },
         textColor: '#000'
+    },
+    {
+        category: 'Gaming',
+        name: 'Steam',
+        icon: 'steam',
+        triggers: [
+            'st',
+            'steam'
+        ],
+        url: 'https://store.steampowered.com',
+        normalisedURL: 'steampowered.com',
+        commands: {
+            search: {
+                template: '{@}/search/?term={$}'
+            }
+        },
+        bgColor: {
+            type: 'solid',
+            color: '#171a21'
+        },
+        textColor: '#c7d5e0',
+        pinned: true
+    },
+    {
+        category: 'Social',
+        name: 'TikTok',
+        icon: 'tiktok',
+        triggers: [
+            'tt',
+            'tk',
+            'tiktok'
+        ],
+        url: 'https://www.tiktok.com',
+        normalisedURL: 'tiktok.com',
+        commands: {
+            search: {
+                template: '{@}/search?q={$}'
+            }
+        },
+        bgColor: {
+            type: 'gradient',
+            gradientType: 'linear',
+            colors: ['#000000', '#25f4ee', '#fe2c55'],
+            stops: [0, 50, 100]
+        },
+        textColor: '#ffffff',
+        pinned: true
+    },
+    {
+        category: 'Work',
+        name: 'Notion',
+        icon: 'notion',
+        triggers: [
+            'no',
+            'nt',
+            'notion'
+        ],
+        url: 'https://www.notion.so',
+        normalisedURL: 'notion.so',
+        bgColor: {
+            type: 'solid',
+            color: '#000000'
+        },
+        textColor: '#ffffff',
+        pinned: true
     },
 ];
 

@@ -4,9 +4,8 @@
  */
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import { Layout, Palette, Globe, Code, Sparkles } from 'lucide-react';
-import { detectLanguage } from '../../core/LanguageDetector';
 import { t } from '../../core/i18n';
 
 export default function WebsiteBreakdown({ analysis }) {
@@ -49,7 +48,7 @@ export default function WebsiteBreakdown({ analysis }) {
     ];
 
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="w-full max-w-4xl mx-auto p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10"
@@ -64,7 +63,7 @@ export default function WebsiteBreakdown({ analysis }) {
                 {breakdownItems.map((item, index) => {
                     const Icon = item.icon;
                     return (
-                        <motion.div
+                        <Motion.div
                             key={index}
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -73,26 +72,26 @@ export default function WebsiteBreakdown({ analysis }) {
                         >
                             <div className="flex items-center gap-2 mb-2">
                                 <Icon size={16} style={{ color: item.color }} />
-                                <span className="text-xs font-medium text-white/60 uppercase tracking-wide">
+                                <span className="text-xs font-medium text-white/90 uppercase tracking-wide">
                                     {item.label}
                                 </span>
                             </div>
                             <p className="text-sm font-bold text-white">
                                 {item.value}
                             </p>
-                        </motion.div>
+                        </Motion.div>
                     );
                 })}
             </div>
 
             {template?.sections && (
                 <div className="mt-4 pt-4 border-t border-white/10">
-                    <p className="text-xs font-medium text-white/60 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-medium text-white/90 uppercase tracking-wide mb-2">
                         {t(lang, 'ui.includedSections', 'Included Sections')}
                     </p>
                     <div className="flex flex-wrap gap-2">
                         {template.sections.map((section, index) => (
-                            <motion.span
+                            <Motion.span
                                 key={index}
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -105,11 +104,11 @@ export default function WebsiteBreakdown({ analysis }) {
                                 }}
                             >
                                 {section.charAt(0).toUpperCase() + section.slice(1)}
-                            </motion.span>
+                            </Motion.span>
                         ))}
                     </div>
                 </div>
             )}
-        </motion.div>
+        </Motion.div>
     );
 }

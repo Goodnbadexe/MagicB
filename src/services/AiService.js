@@ -29,7 +29,7 @@ export const AiService = {
      */
     generateWebsite: async (prompt, analysis = null) => {
         const key = AiService.getKey();
-        if (!key) throw new Error("No API Key configured");
+        if (!key) throw new Error("No API Key configured. Click the AI status icon to set one.");
 
         // Build enhanced system prompt with multilingual support
         const systemPrompt = buildSystemPrompt(analysis);
@@ -58,7 +58,14 @@ export const AiService = {
 
             if (!response.ok) {
                 const err = await response.json();
-                throw new Error(err.error?.message || "AI API Request Failed");
+                let errorMessage = err.error?.message || "AI API Request Failed";
+
+                // User-friendly error mapping
+                if (response.status === 400) errorMessage = "Invalid Request. Please check your API Key.";
+                if (response.status === 401 || response.status === 403) errorMessage = "Invalid API Key. Please check your settings.";
+                if (response.status === 429) errorMessage = "Rate Limit Exceeded. Please try again later.";
+
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -77,6 +84,59 @@ export const AiService = {
 
         } catch (error) {
             console.error("AI Generation Error:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Refine existing HTML based on user instruction
+     * @param {string} currentHtml - The current HTML content
+     * @param {string} instruction - User's refinement instruction
+     */
+    refineWebsite: async (currentHtml, instruction) => {
+        const key = AiService.getKey();
+        if (!key) throw new Error("No API Key configured");
+
+        const systemPrompt = `You are an expert web developer.
+Your task is to EDIT the provided HTML based on the USER INSTRUCTION.
+
+CRITICAL RULES:
+1. Return ONLY the complete, valid, updated HTML code. 
+2. Do not wrap in markdown blocks.
+3. Keep existing styles and structure unless asked to change.
+4. Maintain responsiveness.
+5. Do NOT explain your changes, just return the code.`;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `${systemPrompt}\n\nCURRENT HTML:\n${currentHtml}\n\nUSER INSTRUCTION: ${instruction}`
+                        }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || "Refinement Failed");
+            }
+
+            const data = await response.json();
+            let generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!generatedText) throw new Error("No content generated");
+
+            return generatedText
+                .replace(/```html/g, '')
+                .replace(/```/g, '')
+                .trim();
+
+        } catch (error) {
+            console.error("AI Refinement Error:", error);
             throw error;
         }
     }
@@ -112,7 +172,8 @@ CRITICAL RULES:
 - Set <html lang="${lang.code}" dir="${lang.dir}">
 - Use appropriate fonts for ${lang.name}: ${lang.font}
 - All UI text should be in ${lang.name} (${lang.nativeName})
-- Ensure proper RTL support if dir="rtl" (right-to-left layout)`;}
+- Ensure proper RTL support if dir="rtl" (right-to-left layout)`;
+    }
 
     // Add theme instructions
     if (analysis && analysis.theme) {
@@ -155,12 +216,12 @@ CRITICAL RULES:
             fashion: 'Style-focused design with collections, lookbooks, and brand showcases.',
             beauty: 'Elegant design with services, products, and booking options.'
         };
-        
+
         if (categoryGuidance[analysis.category]) {
             prompt += `\n\nWEBSITE TYPE: ${analysis.category.toUpperCase()}\n${categoryGuidance[analysis.category]}`;
         }
     }
-    
+
     // Add template information if available
     if (analysis && analysis.template) {
         prompt += `\n\nTEMPLATE: ${analysis.template.name}\nStyle: ${analysis.template.style}\nLayout: ${analysis.template.layout}\nSections to include: ${analysis.template.sections.join(', ')}`;
@@ -171,7 +232,7 @@ CRITICAL RULES:
         prompt += `\n\nCONTENT HINTS:
 - Hero text: "${analysis.content.heroText}"
 - Description: "${analysis.content.description}"
-- Include sections: ${Object.entries(analysis.content.sections).filter(([_, v]) => v).map(([k]) => k).join(', ')}`;
+- Include sections: ${analysis.content.sections.join(', ')}`;
     }
 
     // Add layout preferences

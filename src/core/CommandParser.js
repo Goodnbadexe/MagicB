@@ -72,7 +72,7 @@ export function parseCommand(input) {
         };
     }
 
-    // 2. Check for Macros (Legacy functionality)
+    // 2. Check for Macros by trigger (primary command mode)
     // Format: "trigger" or "trigger parameter"
     const parts = trimmed.split(' ');
     const trigger = parts[0].toLowerCase();
@@ -104,6 +104,38 @@ export function parseCommand(input) {
             url,
             query: trimmed,
             param
+        };
+    }
+
+    // 2b. Check for Macros by name (human-friendly mode)
+    // Example: "instagram" or "instagram someuser"
+    const firstWord = parts[0].toLowerCase();
+    const rest = parts.slice(1).join(' ');
+
+    const nameMacro = MACROS.find(m => m.name.toLowerCase() === firstWord);
+
+    if (nameMacro) {
+        let url = nameMacro.url;
+
+        if (rest) {
+            // Reuse command logic if this macro supports search / go
+            if (nameMacro.commands && nameMacro.commands.go && !rest.startsWith('?')) {
+                url = nameMacro.commands.go.template
+                    .replace('{@}', nameMacro.url)
+                    .replace('{$}', encodeURIComponent(rest));
+            } else if (nameMacro.commands && nameMacro.commands.search) {
+                url = nameMacro.commands.search.template
+                    .replace('{@}', nameMacro.url)
+                    .replace('{$}', encodeURIComponent(rest));
+            }
+        }
+
+        return {
+            type: COMMAND_Types.REDIRECT,
+            macro: nameMacro,
+            url,
+            query: trimmed,
+            param: rest
         };
     }
 
