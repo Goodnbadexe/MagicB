@@ -1,8 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import process from 'node:process'
+
+const isGitHubPages = process.env.GITHUB_PAGES === 'true'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: isGitHubPages ? '/MagicB/' : '/',
   plugins: [react()],
   server: {
     watch: {
