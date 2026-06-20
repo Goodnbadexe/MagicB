@@ -15,12 +15,14 @@ function App() {
 
   const handleCommand = (cmd) => {
     if (cmd.type === COMMAND_Types.REDIRECT || cmd.type === COMMAND_Types.SEARCH) {
-      // SIMULATED REDIRECT: Show overlay instead of leaving
+      // Actually launch: show a brief transition, then navigate to the site.
+      // This is the core of MagicB — typing a trigger should take you there.
       if (cmd.url) {
-        setRedirect({ url: cmd.url });
+        const target = cmd.macro?.normalisedURL || cmd.url;
+        setRedirect({ url: target });
         setTimeout(() => {
-          setRedirect(null);
-        }, 2000);
+          window.location.href = cmd.url;
+        }, 350);
       }
     } else if (cmd.type === COMMAND_Types.BUILD) {
       setMode('BUILDER');
@@ -100,10 +102,12 @@ function App() {
           />
 
           {mode === 'COMMAND' && (
-            <div className="mt-12 flex gap-4 text-white text-sm">
-              <span>Press <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">yt</kbd> for YouTube</span>
+            <div className="mt-12 flex flex-wrap justify-center gap-x-4 gap-y-2 text-white/90 text-sm">
+              <span><kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">yt</kbd> opens YouTube</span>
               <span>•</span>
-              <span>Type <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">build...</kbd> to create</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">g ? react</kbd> searches GitHub</span>
+              <span>•</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">build...</kbd> generates a site</span>
             </div>
           )}
         </motion.div>

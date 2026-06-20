@@ -46,8 +46,47 @@ const BUILD_KEYWORDS = [
  */
 
 /**
+ * Resolve the destination URL for a macro given an optional parameter.
+ *
+ * Mirrors the original MagicB command grammar:
+ *   - "?<query>"  -> use the macro's `search` template
+ *   - "/<path>"   -> use the macro's `go` template
+ *   - "<text>"    -> prefer `search` (most intuitive), fall back to `go`
+ * If no template applies, fall back to the macro's base URL.
+ *
+ * @param {Object} macro
+ * @param {string} param
+ * @returns {string}
+ */
+export function resolveMacroUrl(macro, param) {
+    if (!param || !param.trim()) return macro.url;
+
+    const cmds = macro.commands || {};
+    let template = null;
+    let value = param.trim();
+
+    if (value.startsWith('?')) {
+        template = cmds.search?.template;
+        value = value.slice(1).trim();
+    } else if (value.startsWith('/')) {
+        template = cmds.go?.template;
+        value = value.slice(1).trim();
+    } else {
+        // Bare parameter: searching a site is the common case, so prefer it.
+        template = cmds.search?.template || cmds.go?.template;
+    }
+
+    // No matching template (e.g. macro with no commands) -> just open the site.
+    if (!template) return macro.url;
+
+    return template
+        .replace('{@}', macro.url)
+        .replace('{$}', encodeURIComponent(value));
+}
+
+/**
  * Parses the user input string.
- * @param {string} input 
+ * @param {string} input
  * @returns {CommandResult}
  */
 export function parseCommand(input) {
@@ -81,27 +120,10 @@ export function parseCommand(input) {
     const macro = MACROS.find(m => m.triggers.includes(trigger));
 
     if (macro) {
-        let url = macro.url;
-
-        // If there is a param, try to find a specific command template
-        if (param) {
-            if (macro.commands && macro.commands.go && !parts[1].startsWith('?')) {
-                // e.g. "yt dQw4w9WgXcQ" -> youtube.com/watch?v=... (depends on template)
-                // For simplicity, we implement a basic replacement logic similar to legacy
-                url = macro.commands.go.template
-                    .replace('{@}', macro.url)
-                    .replace('{$}', encodeURIComponent(param));
-            } else if (macro.commands && macro.commands.search) {
-                url = macro.commands.search.template
-                    .replace('{@}', macro.url)
-                    .replace('{$}', encodeURIComponent(param));
-            }
-        }
-
         return {
             type: COMMAND_Types.REDIRECT,
             macro,
-            url,
+            url: resolveMacroUrl(macro, param),
             query: trimmed,
             param
         };
@@ -115,25 +137,10 @@ export function parseCommand(input) {
     const nameMacro = MACROS.find(m => m.name.toLowerCase() === firstWord);
 
     if (nameMacro) {
-        let url = nameMacro.url;
-
-        if (rest) {
-            // Reuse command logic if this macro supports search / go
-            if (nameMacro.commands && nameMacro.commands.go && !rest.startsWith('?')) {
-                url = nameMacro.commands.go.template
-                    .replace('{@}', nameMacro.url)
-                    .replace('{$}', encodeURIComponent(rest));
-            } else if (nameMacro.commands && nameMacro.commands.search) {
-                url = nameMacro.commands.search.template
-                    .replace('{@}', nameMacro.url)
-                    .replace('{$}', encodeURIComponent(rest));
-            }
-        }
-
         return {
             type: COMMAND_Types.REDIRECT,
             macro: nameMacro,
-            url,
+            url: resolveMacroUrl(nameMacro, rest),
             query: trimmed,
             param: rest
         };

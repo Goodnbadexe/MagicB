@@ -164,6 +164,10 @@ export default function CommandBar({ onCommand, isBuilderActive }) {
         ? getMacroStyle(parsed.macro)
         : {};
 
+    // Full-screen ambient glow that adopts the matched site's colour, so the
+    // launcher feels alive as you type (e.g. "yt" glows red, "wa" glows green).
+    const ambientBackground = activeStyle.background || activeStyle.backgroundColor || null;
+
     // Default to white text unless macro specifies otherwise (better for dark mode)
     const textColor = activeStyle.color || '#ffffff';
 
@@ -182,6 +186,21 @@ export default function CommandBar({ onCommand, isBuilderActive }) {
                 focusInput();
             }}
         >
+
+            {/* Ambient site-colour glow (fixed so it covers the whole viewport) */}
+            <AnimatePresence>
+                {ambientBackground && (
+                    <motion.div
+                        key={parsed?.macro?.name}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 0.22 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="fixed inset-0 pointer-events-none"
+                        style={{ background: ambientBackground, zIndex: 1 }}
+                    />
+                )}
+            </AnimatePresence>
 
             {/* The Input Core */}
             <div className="relative z-50 flex flex-col items-center w-full max-w-4xl">
