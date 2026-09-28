@@ -11,9 +11,28 @@ import { getThemeClasses, generateThemeStyles, getFontFamily } from '../../core/
 import { t, getContentTranslations } from '../../core/i18n';
 import { placeholderImage } from '../../utils/placeholderImage';
 
-// Cache configuration
-const CACHE_PREFIX = 'magicb_generation_';
+// Cache configuration. Only AI output is cached, and every entry records
+// that ({ source: 'ai' }). Entries under the old unversioned prefix come from
+// a build that also cached instant templates, so they are purged, never
+// served (otherwise a stale template would hide an available demo).
+const LEGACY_CACHE_PREFIX = 'magicb_generation_';
+const CACHE_PREFIX = 'magicb_generation_v2_';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+let legacyCachePurged = false;
+
+/** Remove pre-v2 cache entries once per page load. */
+function purgeLegacyCache() {
+    if (legacyCachePurged) return;
+    legacyCachePurged = true;
+    try {
+        Object.keys(localStorage)
+            .filter(key => key.startsWith(LEGACY_CACHE_PREFIX) && !key.startsWith(CACHE_PREFIX))
+            .forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+        console.error('Legacy cache purge error:', e);
+    }
+}
 
 /**
  * Get cache key for a prompt
@@ -35,6 +54,11 @@ function getCachedHtml(cacheKey) {
         if (!cached) return null;
 
         const data = JSON.parse(cached);
+        // Serve only entries this version wrote for AI output.
+        if (!data || data.source !== 'ai' || typeof data.html !== 'string') {
+            localStorage.removeItem(cacheKey);
+            return null;
+        }
         if (Date.now() - data.timestamp > CACHE_TTL) {
             localStorage.removeItem(cacheKey);
             return null;
@@ -47,7 +71,7 @@ function getCachedHtml(cacheKey) {
 }
 
 /**
- * Save HTML to localStorage cache
+ * Save AI-generated HTML to localStorage cache (never templates)
  * @param {string} cacheKey - Cache key
  * @param {string} html - HTML content
  */
@@ -55,6 +79,7 @@ function saveCachedHtml(cacheKey, html) {
     // Built outside the try so the quota-retry path below can reuse it.
     const payload = JSON.stringify({
         html,
+        source: 'ai',
         timestamp: Date.now()
     });
 
@@ -153,6 +178,7 @@ export async function generateHtml(prompt) {
     }
 
     // Check cache
+    purgeLegacyCache();
     const cacheKey = getCacheKey(prompt);
     const cached = getCachedHtml(cacheKey);
     if (cached) {
