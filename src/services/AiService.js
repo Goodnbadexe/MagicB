@@ -3,6 +3,22 @@
  * Handles AI-powered website generation using Gemini API
  */
 
+const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+/**
+ * Request headers for the Gemini API. The key travels in the
+ * `x-goog-api-key` header rather than the `?key=` query string so it is not
+ * captured wherever request URLs are recorded (proxy/server access logs,
+ * HAR exports, "copy as URL/cURL", error-reporting breadcrumbs).
+ * @param {string} key - Gemini API key
+ */
+function geminiHeaders(key) {
+    return {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key
+    };
+}
+
 /**
  * Service to handle AI generation request.
  */
@@ -36,11 +52,9 @@ export const AiService = {
 
         try {
             // Using Google Gemini API endpoint
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+            const response = await fetch(GEMINI_ENDPOINT, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: geminiHeaders(key),
                 body: JSON.stringify({
                     contents: [{
                         parts: [{
@@ -108,9 +122,9 @@ CRITICAL RULES:
 5. Do NOT explain your changes, just return the code.`;
 
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+            const response = await fetch(GEMINI_ENDPOINT, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: geminiHeaders(key),
                 body: JSON.stringify({
                     contents: [{
                         parts: [{
