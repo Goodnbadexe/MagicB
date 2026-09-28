@@ -153,7 +153,7 @@ export async function generateHtml(prompt) {
             const aiHtml = await AiService.generateWebsite(prompt, analysis);
 
             // Validate HTML before caching
-            if (aiHtml && aiHtml.trim().length > 0 && aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html')) {
+            if (aiHtml && aiHtml.trim().length > 0 && (aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html'))) {
                 // Cache the result
                 saveCachedHtml(cacheKey, aiHtml);
                 return aiHtml;
