@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { generateHtml } from './HtmlGenerator.jsx';
 import { Loader2, CheckCircle2, Layout, ScanSearch, Code2, Lock, Download, Copy, ExternalLink, Share2, ShieldCheck, Send, MessageSquare, Sparkles } from 'lucide-react';
@@ -7,9 +7,11 @@ import { detectLanguage } from '../../core/LanguageDetector';
 import { t } from '../../core/i18n';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import WebsiteBreakdown from './WebsiteBreakdown';
-import { downloadHTML, copyToClipboard, openInNewWindow } from '../../utils/exportUtils';
+import { downloadHTML, copyToClipboard, openInNewWindow, PREVIEW_SANDBOX } from '../../utils/exportUtils';
 import ApiKeyModal from '../../components/ApiKeyModal';
 import { AiService } from '../../services/AiService.js';
+import { useDemoStatus } from '../../services/demoStatus.js';
+import AiNotice from './AiNotice';
 
 const STEPS = [
     { key: 'analyzing', icon: ScanSearch },
@@ -24,7 +26,15 @@ export default function ArchitectView({ query, onBack }) {
     const [analysis, setAnalysis] = useState(null);
     const [exportStatus, setExportStatus] = useState(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [hasApiKey, setHasApiKey] = useState(!!localStorage.getItem('magicb_ai_key'));
+    const [modalReason, setModalReason] = useState(null);
+    // Why the last result is a template rather than AI output (see generateHtml).
+    const [notice, setNotice] = useState(null);
+    const [source, setSource] = useState(null);
+    // Bumped to regenerate the same query, e.g. right after a key is added.
+    const [attempt, setAttempt] = useState(0);
+    // Read on every render so a key saved from any dialog is picked up.
+    const hasApiKey = AiService.hasKey();
+    const demo = useDemoStatus();
 
     // Refinement State
     const [refinementQuery, setRefinementQuery] = useState('');
@@ -34,10 +44,21 @@ export default function ArchitectView({ query, onBack }) {
     const language = detectLanguage(query);
     const lang = language.code;
 
-    // Check key on mount and when modal closes
-    useEffect(() => {
-        setHasApiKey(!!localStorage.getItem('magicb_ai_key'));
-    }, [isSettingsOpen]);
+    const openSettings = (reason = null) => {
+        setModalReason(reason);
+        setIsSettingsOpen(true);
+    };
+
+    const closeSettings = () => {
+        setIsSettingsOpen(false);
+        // A key was just added while the preview is only a template:
+        // regenerate the same prompt with it straight away.
+        if (!hasApiKey && AiService.hasKey() && source === 'template') {
+            setHtml('');
+            setNotice(null);
+            setAttempt(prev => prev + 1);
+        }
+    };
 
     // Helper for toast notifications
     const showToast = (message, type = 'success') => {
@@ -49,7 +70,7 @@ export default function ArchitectView({ query, onBack }) {
 
         // Add icon
         const icon = document.createElement('span');
-        icon.innerHTML = type === 'error' ? '✕' : '✓';
+        icon.textContent = type === 'error' ? '✕' : '✓';
         notification.prepend(icon);
 
         document.body.appendChild(notification);
@@ -86,7 +107,7 @@ export default function ArchitectView({ query, onBack }) {
 
             try {
                 // Actual generation
-                const generated = await generateHtml(query);
+                const result = await generateHtml(query);
 
                 if (!isMounted) return;
 
@@ -99,7 +120,9 @@ export default function ArchitectView({ query, onBack }) {
                 // Small delay for "Finalizing" to be seen
                 setTimeout(() => {
                     if (isMounted) {
-                        setHtml(generated);
+                        setHtml(result.html);
+                        setSource(result.source);
+                        setNotice(result.notice);
                     }
                 }, 600);
 
@@ -115,7 +138,7 @@ export default function ArchitectView({ query, onBack }) {
             isMounted = false;
             clearInterval(stepInterval);
         };
-    }, [query]);
+    }, [query, attempt]);
 
     // Refinement Handler
     const handleRefinement = async (e) => {
@@ -123,6 +146,19 @@ export default function ArchitectView({ query, onBack }) {
         if (!refinementQuery.trim() || isRefining) return;
 
         const instruction = refinementQuery;
+
+        // The free demo only covers first drafts: refining sends the whole
+        // page back to the model, so it needs the visitor's own key.
+        if (!hasApiKey) {
+            setChatHistory(prev => [
+                ...prev,
+                { role: 'user', text: instruction },
+                { role: 'ai', text: 'Refining uses your own free Gemini key (the demo covers first drafts). Add a key, then send your request again.' }
+            ]);
+            openSettings('refine');
+            return;
+        }
+
         setRefinementQuery('');
         setIsRefining(true);
 
@@ -130,10 +166,6 @@ export default function ArchitectView({ query, onBack }) {
         setChatHistory(prev => [...prev, { role: 'user', text: instruction }]);
 
         try {
-            if (!hasApiKey) {
-                throw new Error("Please configure your API Key first");
-            }
-
             const newHtml = await AiService.refineWebsite(html, instruction);
             setHtml(newHtml);
             showToast(t(lang, 'ui.refined', 'Website updated!'));
@@ -148,9 +180,17 @@ export default function ArchitectView({ query, onBack }) {
         }
     };
 
+    const pill = hasApiKey
+        ? { label: 'YOUR KEY', title: 'Generating with your own Gemini key', className: 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100' }
+        : demo.status === 'available'
+            ? { label: `DEMO · ${demo.remaining} LEFT`, title: 'Free demo generations left. Click to use your own key instead.', className: 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' }
+            : demo.status === 'exhausted'
+                ? { label: 'DEMO LIMIT', title: 'Free demo limit reached. Click to use your own key.', className: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' }
+                : { label: 'AI OFF', title: 'Add a Gemini key to generate with AI', className: 'bg-gray-200 text-gray-500 border-gray-300 hover:bg-gray-300' };
+
     return (
         <div className="w-full h-full flex flex-col pt-4 md:pt-10 px-4 md:px-8" dir={language.dir}>
-            <ApiKeyModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+            <ApiKeyModal isOpen={isSettingsOpen} onClose={closeSettings} reason={modalReason} />
 
             <div className="max-w-6xl mx-auto w-full h-[85vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col border border-gray-800 relative">
 
@@ -165,14 +205,13 @@ export default function ArchitectView({ query, onBack }) {
 
                         {/* AI Status Pill */}
                         <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${hasApiKey
-                                ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
-                                : 'bg-gray-200 text-gray-500 border-gray-300 hover:bg-gray-300'
-                                }`}
+                            data-testid="ai-status-pill"
+                            onClick={() => openSettings(!hasApiKey && demo.status === 'exhausted' ? 'rate_limited' : null)}
+                            title={pill.title}
+                            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${pill.className}`}
                         >
                             <ShieldCheck size={10} />
-                            {hasApiKey ? 'AI ONLINE' : 'AI OFF'}
+                            {pill.label}
                         </button>
                     </div>
 
@@ -233,6 +272,14 @@ export default function ArchitectView({ query, onBack }) {
                     </div>
                 </div>
 
+                {html && notice && (
+                    <AiNotice
+                        notice={notice}
+                        onUseKey={() => openSettings(notice.kind === 'rate_limited' || notice.kind === 'unavailable' ? notice.kind : null)}
+                        onDismiss={() => setNotice(null)}
+                    />
+                )}
+
                 {/* Content Area */}
                 <div className="flex-1 relative bg-white flex overflow-hidden">
 
@@ -243,6 +290,7 @@ export default function ArchitectView({ query, onBack }) {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 srcDoc={html}
+                                sandbox={PREVIEW_SANDBOX}
                                 className="w-full h-full border-none"
                                 title="Generated Website"
                             />

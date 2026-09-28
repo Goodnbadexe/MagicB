@@ -3,14 +3,36 @@
  * Generates website HTML from prompts using AI or parametric fallback
  */
 
-import { AiService } from '../../services/AiService';
+import { AiService, DemoError } from '../../services/AiService';
+import { ensureDemoStatus } from '../../services/demoStatus';
+import { looksLikeHtml } from '../../shared/gemini';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import { getThemeClasses, generateThemeStyles, getFontFamily } from '../../core/ThemeSystem';
 import { t, getContentTranslations } from '../../core/i18n';
+import { placeholderImage } from '../../utils/placeholderImage';
 
-// Cache configuration
-const CACHE_PREFIX = 'magicb_generation_';
+// Cache configuration. Only AI output is cached, and every entry records
+// that ({ source: 'ai' }). Entries under the old unversioned prefix come from
+// a build that also cached instant templates, so they are purged, never
+// served (otherwise a stale template would hide an available demo).
+const LEGACY_CACHE_PREFIX = 'magicb_generation_';
+const CACHE_PREFIX = 'magicb_generation_v2_';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+let legacyCachePurged = false;
+
+/** Remove pre-v2 cache entries once per page load. */
+function purgeLegacyCache() {
+    if (legacyCachePurged) return;
+    legacyCachePurged = true;
+    try {
+        Object.keys(localStorage)
+            .filter(key => key.startsWith(LEGACY_CACHE_PREFIX) && !key.startsWith(CACHE_PREFIX))
+            .forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+        console.error('Legacy cache purge error:', e);
+    }
+}
 
 /**
  * Get cache key for a prompt
@@ -32,6 +54,11 @@ function getCachedHtml(cacheKey) {
         if (!cached) return null;
 
         const data = JSON.parse(cached);
+        // Serve only entries this version wrote for AI output.
+        if (!data || data.source !== 'ai' || typeof data.html !== 'string') {
+            localStorage.removeItem(cacheKey);
+            return null;
+        }
         if (Date.now() - data.timestamp > CACHE_TTL) {
             localStorage.removeItem(cacheKey);
             return null;
@@ -44,17 +71,20 @@ function getCachedHtml(cacheKey) {
 }
 
 /**
- * Save HTML to localStorage cache
+ * Save AI-generated HTML to localStorage cache (never templates)
  * @param {string} cacheKey - Cache key
  * @param {string} html - HTML content
  */
 function saveCachedHtml(cacheKey, html) {
+    // Built outside the try so the quota-retry path below can reuse it.
+    const payload = JSON.stringify({
+        html,
+        source: 'ai',
+        timestamp: Date.now()
+    });
+
     try {
-        const data = {
-            html,
-            timestamp: Date.now()
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(cacheKey, payload);
 
         // Clean up old cache entries (keep last 50)
         cleanupCache();
@@ -64,7 +94,7 @@ function saveCachedHtml(cacheKey, html) {
         if (e.name === 'QuotaExceededError') {
             clearOldCache();
             try {
-                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem(cacheKey, payload);
             } catch (e2) {
                 console.error('Cache still full after cleanup:', e2);
             }
@@ -126,57 +156,78 @@ function clearOldCache() {
 }
 
 /**
- * Generate HTML from prompt
+ * @typedef {Object} GenerationResult
+ * @property {string} html
+ * @property {'byo'|'demo'|'cache'|'template'} source - who produced the HTML
+ * @property {null|{kind: 'rate_limited'|'unavailable'|'demo_failed'|'byo_failed', scope?: string|null, message?: string}} notice
+ *           why AI was not used, so the UI can offer the bring-your-own-key path
+ */
+
+/**
+ * Generate HTML from prompt.
+ *
+ * Order: the visitor's own Gemini key (BYO) if saved -> the free demo
+ * endpoint if available -> the instant parametric template. Only AI output
+ * is cached, so a template shown after a demo limit is never "stuck".
  * @param {string} prompt - User prompt
- * @returns {Promise<string>} Generated HTML
+ * @returns {Promise<GenerationResult>}
  */
 export async function generateHtml(prompt) {
     if (!prompt || typeof prompt !== 'string') {
-        return generateDefaultHtml();
+        return { html: generateDefaultHtml(), source: 'template', notice: null };
     }
 
     // Check cache
+    purgeLegacyCache();
     const cacheKey = getCacheKey(prompt);
     const cached = getCachedHtml(cacheKey);
     if (cached) {
-        return cached.html;
+        return { html: cached.html, source: 'cache', notice: null };
     }
 
     // Analyze prompt
     const analysis = analyzePrompt(prompt);
+    let notice = null;
 
-    // Try AI Generation first
-    const apiKey = AiService.getKey();
-    if (apiKey) {
+    if (AiService.getKey()) {
+        // Bring-your-own-key: straight from the browser to Google.
         try {
-            console.log("Generating with AI...");
             const aiHtml = await AiService.generateWebsite(prompt, analysis);
-
-            // Validate HTML before caching
-            if (aiHtml && aiHtml.trim().length > 0 && aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html')) {
-                // Cache the result
+            if (looksLikeHtml(aiHtml)) {
                 saveCachedHtml(cacheKey, aiHtml);
-                return aiHtml;
-            } else {
-                console.warn("AI returned invalid HTML, falling back to parametric");
+                return { html: aiHtml, source: 'byo', notice: null };
             }
+            console.warn("AI returned invalid HTML, falling back to parametric");
+            notice = { kind: 'byo_failed', message: 'The AI response was not a complete page.' };
         } catch (e) {
-            console.error("AI Generation failed, falling back to parametric engine", e);
-            // Show user-friendly error notification
-            if (e.message && !e.message.includes('No API Key')) {
-                console.warn("AI error:", e.message);
+            console.warn("AI generation failed, falling back to parametric engine:", e.message);
+            notice = { kind: 'byo_failed', message: e.message };
+        }
+    } else {
+        // Free demo on the site owner's key (rate limited server-side).
+        const demo = await ensureDemoStatus();
+        if (demo.status === 'available') {
+            try {
+                const aiHtml = await AiService.generateWithDemo(prompt);
+                if (looksLikeHtml(aiHtml)) {
+                    saveCachedHtml(cacheKey, aiHtml);
+                    return { html: aiHtml, source: 'demo', notice: null };
+                }
+                notice = { kind: 'demo_failed' };
+            } catch (e) {
+                notice = e instanceof DemoError && e.code !== 'failed'
+                    ? { kind: e.code, scope: e.scope }
+                    : { kind: 'demo_failed' };
             }
-            // Fallthrough to parametric if AI fails
+        } else if (demo.status === 'exhausted') {
+            notice = { kind: 'rate_limited', scope: demo.scope };
+        } else {
+            notice = { kind: 'unavailable' };
         }
     }
 
-    // Fallback: Parametric Generator
-    const html = generateParametricHtml(analysis);
-
-    // Cache the result
-    saveCachedHtml(cacheKey, html);
-
-    return html;
+    // Fallback: instant parametric template (not cached; it is cheap).
+    return { html: generateParametricHtml(analysis), source: 'template', notice };
 }
 
 /**
@@ -185,7 +236,7 @@ export async function generateHtml(prompt) {
  * @returns {string} Generated HTML
  */
 function generateParametricHtml(analysis) {
-    const { language, title, theme, colors, category, content, layout, template } = analysis;
+    const { language, title, theme, colors, content, template } = analysis;
     const themeClasses = getThemeClasses(theme, colors);
     const contentTranslations = getContentTranslations(language.code);
 
@@ -202,21 +253,22 @@ function generateParametricHtml(analysis) {
 
     // Use template sections if available
     const sectionsToInclude = template?.sections || content.sections;
+    const isDark = theme.all.includes('dark');
 
     // Build HTML
     const sectionRenderers = {
-        hero: () => generateHeroSection(heroText, description, colors.primary, language, themeClasses),
-        features: () => generateFeaturesSection(language, themeClasses, colors.primary),
-        services: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        hero: () => generateHeroSection(heroText, description, colors.primary, language, isDark),
+        features: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
+        services: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         about: () => generateAboutSection(language, themeClasses),
         contact: () => generateContactSection(language, themeClasses, colors.primary),
         footer: () => generateFooter(siteTitle, language, themeClasses),
         // Map other potential sections to existing renderers or placeholders
-        projects: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        projects: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         testimonials: () => generateAboutSection(language, themeClasses), // Reuse about for now
-        gallery: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        gallery: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         team: () => generateAboutSection(language, themeClasses),
-        menu: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        menu: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         cta: () => generateContactSection(language, themeClasses, colors.primary)
     };
 
@@ -247,7 +299,7 @@ function generateParametricHtml(analysis) {
 <body class="${themeClasses.bg} ${themeClasses.text} min-h-screen flex flex-col ${themeClasses.pattern}">
 
     <!-- Navigation -->
-    ${generateNavigation(siteTitle, colors.primary, language, themeClasses)}
+    ${generateNavigation(siteTitle, colors.primary, language)}
 
     ${sectionsHtml}
 
@@ -268,7 +320,7 @@ function getFallbackSection(section) {
 /**
  * Generate navigation HTML
  */
-function generateNavigation(title, primaryColor, language, themeClasses) {
+function generateNavigation(title, primaryColor, language) {
     const navItems = [
         { key: 'start', href: '#start' },
         { key: 'work', href: '#work' },
@@ -289,8 +341,8 @@ function generateNavigation(title, primaryColor, language, themeClasses) {
 /**
  * Generate hero section HTML
  */
-function generateHeroSection(heroText, description, primaryColor, language, themeClasses) {
-    const heroImage = getImageUrl(heroText.split(' ')[0] + ' minimal' || 'minimal business');
+function generateHeroSection(heroText, description, primaryColor, language, isDark) {
+    const heroImage = placeholderImage({ label: heroText, primary: primaryColor, dark: isDark });
     return `
     <main class="flex-grow flex flex-col md:flex-row items-center justify-between px-6 mt-10 md:mt-20 max-w-7xl mx-auto gap-12">
         <div class="flex-1 text-center md:text-left">
@@ -323,21 +375,22 @@ function generateHeroSection(heroText, description, primaryColor, language, them
 /**
  * Generate features section HTML
  */
-function generateFeaturesSection(language, themeClasses, primaryColor) {
+function generateFeaturesSection(language, themeClasses, primaryColor, isDark) {
     const features = [1, 2, 3];
+    const serviceLabel = t(language.code, 'ui.premiumService', 'Premium Service');
     return `
     <section class="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-3 gap-8" id="work">
         ${features.map(i => `
         <div class="${themeClasses.cardBg} p-0 rounded-3xl border ${themeClasses.border} hover:border-opacity-50 transition-all group cursor-pointer shadow-sm hover:shadow-xl overflow-hidden" style="border-color: rgba(var(--primary-rgb), 0.2);">
             <div class="h-48 overflow-hidden relative" style="-webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%); mask-image: linear-gradient(to bottom, black 50%, transparent 100%);">
-                <img src="${getImageUrl('service ' + i + ' minimal')}" alt="Service ${i}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
+                <img src="${placeholderImage({ label: `${serviceLabel} ${i}`, primary: primaryColor, dark: isDark })}" alt="Service ${i}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
                 <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
             </div>
             <div class="p-8">
             <div class="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center text-white text-xl shadow-lg transform -translate-y-14 group-hover:-translate-y-16 transition-transform" style="background-color: ${primaryColor};">
                 ${i}
             </div>
-            <h3 class="text-2xl font-bold mb-4">${t(language.code, 'ui.premiumService', 'Premium Service')} ${i}</h3>
+            <h3 class="text-2xl font-bold mb-4">${serviceLabel} ${i}</h3>
             <p class="opacity-60 leading-relaxed">
                 ${t(language.code, 'ui.serviceDescription', 'Short description of the service we provide and how it helps you succeed.')}
             </p>
@@ -432,15 +485,4 @@ export function clearCache() {
     } catch (e) {
         console.error('Clear cache error:', e);
     }
-}
-
-/**
- * Get a placeholder image URL
- * Uses Unsplash Source (deprecated but still works sometimes) or a reliable placeholder service
- */
-function getImageUrl(keyword) {
-    // Using a reliable placeholder service that supports keywords
-    // We append a random timestamp to prevent caching issues if needed, but for identical keywords we might want caching.
-    // Let's use standard unsplash source format or similar.
-    return `https://source.unsplash.com/800x600/?${encodeURIComponent(keyword)}`;
 }

@@ -1,16 +1,14 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseCommand, COMMAND_Types } from '../core/CommandParser';
 import { getMacroStyle } from '../core/ThemeSystem';
-import { getIcon } from './Icons';
+import { Icons } from './Icons';
 import { ArrowRight, Sparkles, Search } from 'lucide-react';
 import { MACROS } from '../config/macros';
 
 export default function CommandBar({ onCommand, isBuilderActive }) {
     const [input, setInput] = useState('');
-    const [parsed, setParsed] = useState(null);
-    const [suggestions, setSuggestions] = useState([]);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
     const [hintIndex, setHintIndex] = useState(0);
     const inputRef = useRef(null);
@@ -78,29 +76,29 @@ export default function CommandBar({ onCommand, isBuilderActive }) {
 
     const currentHint = MACROS[hintIndex];
 
-    useEffect(() => {
-        inputRef.current?.focus();
+    // Parsed command and suggestions are derived from `input` during render
+    // rather than mirrored into state from an effect.
+    const parsed = useMemo(() => (input.trim() ? parseCommand(input) : null), [input]);
 
-        if (!input.trim()) {
-            setParsed(null);
-            setSuggestions([]);
-            setSelectedSuggestionIndex(-1);
-            return;
-        }
-
-        const result = parseCommand(input);
-        setParsed(result);
-
-        // Generate Suggestions
+    const suggestions = useMemo(() => {
+        if (!input.trim()) return [];
         const lower = input.toLowerCase();
-        const activeSuggestions = MACROS.filter(m =>
+        return MACROS.filter(m =>
             m.name.toLowerCase().includes(lower) ||
             m.triggers.some(t => t.includes(lower))
         ).slice(0, 5); // Limit to top 5
+    }, [input]);
 
-        setSuggestions(activeSuggestions);
-        setSelectedSuggestionIndex(activeSuggestions.length ? 0 : -1);
+    // Re-highlight the first suggestion whenever the input changes
+    // (React's "adjust state when a value changes" pattern).
+    const [highlightedFor, setHighlightedFor] = useState(input);
+    if (highlightedFor !== input) {
+        setHighlightedFor(input);
+        setSelectedSuggestionIndex(suggestions.length ? 0 : -1);
+    }
 
+    useEffect(() => {
+        inputRef.current?.focus();
     }, [input]);
 
     const handleKeyDown = (e) => {
@@ -169,7 +167,7 @@ export default function CommandBar({ onCommand, isBuilderActive }) {
 
     // Icon logic
     const IconComponent = parsed?.type === COMMAND_Types.REDIRECT && parsed.macro?.icon
-        ? getIcon(parsed.macro.icon)
+        ? (Icons[parsed.macro.icon] || Icons.generic)
         : (parsed?.type === COMMAND_Types.BUILD ? Sparkles
             : (parsed?.type === COMMAND_Types.CALCULATOR ? ArrowRight : Search));
 
