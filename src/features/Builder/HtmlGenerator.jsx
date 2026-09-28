@@ -9,6 +9,7 @@ import { looksLikeHtml } from '../../shared/gemini';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import { getThemeClasses, generateThemeStyles, getFontFamily } from '../../core/ThemeSystem';
 import { t, getContentTranslations } from '../../core/i18n';
+import { placeholderImage } from '../../utils/placeholderImage';
 
 // Cache configuration
 const CACHE_PREFIX = 'magicb_generation_';
@@ -226,21 +227,22 @@ function generateParametricHtml(analysis) {
 
     // Use template sections if available
     const sectionsToInclude = template?.sections || content.sections;
+    const isDark = theme.all.includes('dark');
 
     // Build HTML
     const sectionRenderers = {
-        hero: () => generateHeroSection(heroText, description, colors.primary, language),
-        features: () => generateFeaturesSection(language, themeClasses, colors.primary),
-        services: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        hero: () => generateHeroSection(heroText, description, colors.primary, language, isDark),
+        features: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
+        services: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         about: () => generateAboutSection(language, themeClasses),
         contact: () => generateContactSection(language, themeClasses, colors.primary),
         footer: () => generateFooter(siteTitle, language, themeClasses),
         // Map other potential sections to existing renderers or placeholders
-        projects: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        projects: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         testimonials: () => generateAboutSection(language, themeClasses), // Reuse about for now
-        gallery: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        gallery: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         team: () => generateAboutSection(language, themeClasses),
-        menu: () => generateFeaturesSection(language, themeClasses, colors.primary),
+        menu: () => generateFeaturesSection(language, themeClasses, colors.primary, isDark),
         cta: () => generateContactSection(language, themeClasses, colors.primary)
     };
 
@@ -313,8 +315,8 @@ function generateNavigation(title, primaryColor, language) {
 /**
  * Generate hero section HTML
  */
-function generateHeroSection(heroText, description, primaryColor, language) {
-    const heroImage = getImageUrl(heroText.split(' ')[0] + ' minimal' || 'minimal business');
+function generateHeroSection(heroText, description, primaryColor, language, isDark) {
+    const heroImage = placeholderImage({ label: heroText, primary: primaryColor, dark: isDark });
     return `
     <main class="flex-grow flex flex-col md:flex-row items-center justify-between px-6 mt-10 md:mt-20 max-w-7xl mx-auto gap-12">
         <div class="flex-1 text-center md:text-left">
@@ -347,21 +349,22 @@ function generateHeroSection(heroText, description, primaryColor, language) {
 /**
  * Generate features section HTML
  */
-function generateFeaturesSection(language, themeClasses, primaryColor) {
+function generateFeaturesSection(language, themeClasses, primaryColor, isDark) {
     const features = [1, 2, 3];
+    const serviceLabel = t(language.code, 'ui.premiumService', 'Premium Service');
     return `
     <section class="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-3 gap-8" id="work">
         ${features.map(i => `
         <div class="${themeClasses.cardBg} p-0 rounded-3xl border ${themeClasses.border} hover:border-opacity-50 transition-all group cursor-pointer shadow-sm hover:shadow-xl overflow-hidden" style="border-color: rgba(var(--primary-rgb), 0.2);">
             <div class="h-48 overflow-hidden relative" style="-webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%); mask-image: linear-gradient(to bottom, black 50%, transparent 100%);">
-                <img src="${getImageUrl('service ' + i + ' minimal')}" alt="Service ${i}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
+                <img src="${placeholderImage({ label: `${serviceLabel} ${i}`, primary: primaryColor, dark: isDark })}" alt="Service ${i}" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
                 <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
             </div>
             <div class="p-8">
             <div class="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center text-white text-xl shadow-lg transform -translate-y-14 group-hover:-translate-y-16 transition-transform" style="background-color: ${primaryColor};">
                 ${i}
             </div>
-            <h3 class="text-2xl font-bold mb-4">${t(language.code, 'ui.premiumService', 'Premium Service')} ${i}</h3>
+            <h3 class="text-2xl font-bold mb-4">${serviceLabel} ${i}</h3>
             <p class="opacity-60 leading-relaxed">
                 ${t(language.code, 'ui.serviceDescription', 'Short description of the service we provide and how it helps you succeed.')}
             </p>
@@ -456,15 +459,4 @@ export function clearCache() {
     } catch (e) {
         console.error('Clear cache error:', e);
     }
-}
-
-/**
- * Get a placeholder image URL
- * Uses Unsplash Source (deprecated but still works sometimes) or a reliable placeholder service
- */
-function getImageUrl(keyword) {
-    // Using a reliable placeholder service that supports keywords
-    // We append a random timestamp to prevent caching issues if needed, but for identical keywords we might want caching.
-    // Let's use standard unsplash source format or similar.
-    return `https://source.unsplash.com/800x600/?${encodeURIComponent(keyword)}`;
 }

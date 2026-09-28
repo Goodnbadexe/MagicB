@@ -97,7 +97,8 @@ CRITICAL RULES:
 7. Include proper meta tags for SEO and viewport.
 8. The website should have clear sections: Hero, Features/Services, About (optional), Contact (optional), Footer.
 9. Use modern design principles: proper spacing, typography hierarchy, smooth transitions.
-10. Make it accessible: proper heading structure, alt text for images, ARIA labels where needed.`;
+10. Make it accessible: proper heading structure, alt text for images, ARIA labels where needed.
+11. Do NOT hotlink photos from image services (source.unsplash.com is shut down); use inline SVG, CSS gradients or emoji for imagery.`;
 
     // Add language-specific instructions
     if (analysis && analysis.language) {
