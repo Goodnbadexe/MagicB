@@ -68,6 +68,13 @@ export function generateShareableLink(html) {
  *   - allow-scripts: Tailwind CDN + any interactivity in the generated page
  *   - allow-forms:   generated contact forms can be submitted in the preview
  *   - allow-popups:  target="_blank" links work (popups inherit the sandbox)
+ *
+ * CSP note: a srcdoc frame (and the about:blank window used by
+ * openInNewWindow) inherits this app's Content-Security-Policy even though
+ * its origin is opaque. The policy in vercel.json therefore still allows
+ * what generated pages need (Tailwind CDN, inline scripts/styles, https
+ * styles/fonts/images). Tighten it only together with moving previews to a
+ * separately served document.
  */
 export const PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-popups';
 
