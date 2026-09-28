@@ -49,12 +49,14 @@ function getCachedHtml(cacheKey) {
  * @param {string} html - HTML content
  */
 function saveCachedHtml(cacheKey, html) {
+    // Built outside the try so the quota-retry path below can reuse it.
+    const payload = JSON.stringify({
+        html,
+        timestamp: Date.now()
+    });
+
     try {
-        const data = {
-            html,
-            timestamp: Date.now()
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(cacheKey, payload);
 
         // Clean up old cache entries (keep last 50)
         cleanupCache();
@@ -64,7 +66,7 @@ function saveCachedHtml(cacheKey, html) {
         if (e.name === 'QuotaExceededError') {
             clearOldCache();
             try {
-                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem(cacheKey, payload);
             } catch (e2) {
                 console.error('Cache still full after cleanup:', e2);
             }
