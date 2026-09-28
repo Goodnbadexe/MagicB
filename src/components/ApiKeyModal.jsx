@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Key, ExternalLink, Check, Trash2, ShieldCheck, CircleAlert } from 'lucide-react';
 
 /** Validates Gemini API key format (starts with AIza, ~39 chars, base64-like) */
@@ -12,22 +12,25 @@ function isValidGeminiKey(value) {
 }
 
 export default function ApiKeyModal({ isOpen, onClose }) {
-    const [apiKey, setApiKey] = useState('');
-    const [savedKey, setSavedKey] = useState('');
+    if (!isOpen) return null;
+    // Mounted fresh on every open, so its state is (re)initialised from
+    // localStorage without a sync-in-effect.
+    return <ApiKeyDialog onClose={onClose} />;
+}
+
+function readStoredKey() {
+    try {
+        return localStorage.getItem('magicb_ai_key') || '';
+    } catch {
+        return '';
+    }
+}
+
+function ApiKeyDialog({ onClose }) {
+    const [apiKey, setApiKey] = useState(readStoredKey);
+    const [savedKey, setSavedKey] = useState(readStoredKey);
     const [showSuccess, setShowSuccess] = useState(false);
     const [error, setError] = useState(null);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        setError(null);
-        const key = localStorage.getItem('magicb_ai_key');
-        if (!key) return;
-        const id = setTimeout(() => {
-            setSavedKey(key);
-            setApiKey(key);
-        }, 0);
-        return () => clearTimeout(id);
-    }, [isOpen]);
 
     const handleApiKeyChange = (e) => {
         setApiKey(e.target.value);
@@ -60,8 +63,6 @@ export default function ApiKeyModal({ isOpen, onClose }) {
         setSavedKey('');
         setApiKey('');
     };
-
-    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
