@@ -91,3 +91,87 @@ describe('exhausted quota', () => {
         expect(demo.getDemoState()).toMatchObject({ status: 'exhausted', scope: 'daily', recheckAt: NOW + 3_600_000 });
     });
 });
+
+describe('availability check failures', () => {
+    const unavailable503 = () => Response.json({ demo: 'unavailable' }, { status: 503 });
+
+    it('re-probes a transient 503 after 30s, then 2m, then every 10m', async () => {
+        const { demo } = await load();
+        const fetchMock = vi.fn(async () => unavailable503());
+        vi.stubGlobal('fetch', fetchMock);
+
+        await demo.ensureDemoStatus();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(demo.getDemoState()).toMatchObject({ status: 'unavailable', recheckAt: NOW + 30_000 });
+
+        vi.setSystemTime(NOW + 29_000);
+        await demo.ensureDemoStatus();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        let t = NOW;
+        for (const [i, wait] of [30_000, 120_000, 600_000, 600_000].entries()) {
+            t += wait;
+            vi.setSystemTime(t);
+            await demo.ensureDemoStatus();
+            expect(fetchMock).toHaveBeenCalledTimes(i + 2);
+            expect(demo.getDemoState().recheckAt).toBe(t + demo.TRANSIENT_BACKOFF_MS[Math.min(i + 1, 2)]);
+        }
+    });
+
+    it('recovers from a network error and resets the backoff', async () => {
+        const { demo } = await load();
+        const fetchMock = vi.fn()
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValueOnce(statusBody(5))
+            .mockResolvedValueOnce(unavailable503());
+        vi.stubGlobal('fetch', fetchMock);
+
+        await demo.ensureDemoStatus();
+        expect(demo.getDemoState()).toMatchObject({ status: 'unavailable', recheckAt: NOW + 30_000 });
+
+        vi.setSystemTime(NOW + 30_000);
+        expect(await demo.ensureDemoStatus()).toMatchObject({ status: 'available', remaining: 5, recheckAt: null });
+
+        // A later failure starts the schedule from the beginning again.
+        demo.markDemoUnavailable();
+        expect(demo.getDemoState().recheckAt).toBe(NOW + 30_000 + 30_000);
+    });
+
+    it.each([
+        ['a 404', () => new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } })],
+        ['the SPA fallback page (200 text/html)', () => new Response('<!doctype html><div id="root"></div>', { status: 200, headers: { 'content-type': 'text/html' } })]
+    ])('treats %s as "no endpoint" and never re-probes', async (_label, makeResponse) => {
+        const { demo } = await load();
+        const fetchMock = vi.fn(async () => makeResponse());
+        vi.stubGlobal('fetch', fetchMock);
+
+        await demo.ensureDemoStatus();
+        expect(demo.getDemoState()).toMatchObject({ status: 'unavailable', recheckAt: null });
+
+        vi.setSystemTime(NOW + 24 * 60 * 60 * 1000);
+        await demo.ensureDemoStatus();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('never probes in the GitHub Pages build', async () => {
+        vi.stubGlobal('__MAGICB_DEMO_API__', false);
+        const { demo } = await load();
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+
+        vi.setSystemTime(NOW + 24 * 60 * 60 * 1000);
+        expect(await demo.ensureDemoStatus()).toMatchObject({ status: 'unavailable', recheckAt: null });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('classifies failed generations the same way (503 transient, 404 permanent)', async () => {
+        const { demo, AiService } = await load();
+        vi.stubGlobal('fetch', vi.fn(async () => unavailable503()));
+        await expect(AiService.generateWithDemo('build a site')).rejects.toMatchObject({ code: 'unavailable' });
+        expect(demo.getDemoState()).toMatchObject({ status: 'unavailable', recheckAt: NOW + 30_000 });
+
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('gone', { status: 404 })));
+        await expect(AiService.generateWithDemo('build a site')).rejects.toMatchObject({ code: 'unavailable' });
+        expect(demo.getDemoState()).toMatchObject({ status: 'unavailable', recheckAt: null });
+    });
+});

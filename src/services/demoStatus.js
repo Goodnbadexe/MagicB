@@ -7,9 +7,10 @@
  * that endpoint fall back to bring-your-own-key (BYO) mode:
  *   - the GitHub Pages build compiles __MAGICB_DEMO_API__ = false and never
  *     probes at all;
- *   - anywhere else the endpoint is probed once, and anything other than a
- *     JSON { demo: "available" } answer (404, the SPA's index.html, 503,
- *     network error) means "unavailable".
+ *   - anywhere else the endpoint is probed. A definitive "no endpoint here"
+ *     (404, or the host's SPA index.html instead of JSON) is final for the
+ *     page session so static hosts are not polled; a failure that may be
+ *     temporary (503, other 5xx, network error) is re-probed with backoff.
  */
 import { useSyncExternalStore } from 'react';
 
@@ -34,6 +35,9 @@ export const DEMO_ENDPOINT = `${import.meta.env.BASE_URL}api/generate`;
  */
 export const UNKNOWN_RESET_BACKOFF_MS = [60_000, 5 * 60_000, 10 * 60_000];
 
+/** Re-probe schedule after a failure that may be temporary (last step repeats). */
+export const TRANSIENT_BACKOFF_MS = [30_000, 2 * 60_000, 10 * 60_000];
+
 /** @type {DemoState} */
 let state = {
     status: DEMO_API_ENABLED ? 'unknown' : 'unavailable',
@@ -46,6 +50,7 @@ let state = {
 const listeners = new Set();
 let inflight = null;
 let unknownResetStreak = 0;
+let transientStreak = 0;
 
 function backoff(steps, streak) {
     return steps[Math.min(streak, steps.length - 1)];
@@ -88,22 +93,36 @@ export function ensureDemoStatus() {
 }
 
 async function probe() {
+    let res;
     try {
-        const res = await fetch(DEMO_ENDPOINT, {
+        res = await fetch(DEMO_ENDPOINT, {
             headers: { Accept: 'application/json' },
             cache: 'no-store'
         });
-        const isJson = (res.headers.get('content-type') || '').includes('application/json');
-        const data = isJson ? await res.json() : null;
-        if (res.ok && data?.demo === 'available') {
-            applyDemoQuota(data);
-        } else {
-            markDemoUnavailable();
-        }
     } catch {
-        markDemoUnavailable();
+        markDemoUnavailable(); // network error: maybe temporary
+        return state;
+    }
+    const isJson = isJsonResponse(res);
+    const data = isJson ? await res.json().catch(() => null) : null;
+    if (res.ok && data?.demo === 'available') {
+        applyDemoQuota(data);
+    } else {
+        markDemoUnavailable({ permanent: isMissingEndpoint(res) });
     }
     return state;
+}
+
+export function isJsonResponse(res) {
+    return (res.headers.get('content-type') || '').includes('application/json');
+}
+
+/**
+ * True when the host has no demo API at all: a 404, or a successful
+ * non-JSON answer (a static host serving its SPA index.html).
+ */
+export function isMissingEndpoint(res) {
+    return res.status === 404 || (res.ok && !isJsonResponse(res));
 }
 
 /** Record the quota reported by the server (status probe or a generation). */
@@ -114,6 +133,7 @@ export function applyDemoQuota({ limit = null, remaining = 0, reason = null, ret
         return;
     }
     unknownResetStreak = 0;
+    transientStreak = 0;
     update({ status: 'available', limit, remaining: left, scope: null, retryAt: null, recheckAt: null });
 }
 
@@ -122,6 +142,7 @@ export function applyDemoQuota({ limit = null, remaining = 0, reason = null, ret
  * re-check exactly then; without one, fall back to UNKNOWN_RESET_BACKOFF_MS.
  */
 export function markDemoExhausted(scope = null, retryAfter = null, limit = state.limit) {
+    transientStreak = 0; // the endpoint answered definitively
     const seconds = Number(retryAfter);
     const retryAt = Number.isFinite(seconds) && seconds > 0 ? Date.now() + seconds * 1000 : null;
     let recheckAt = retryAt;
@@ -134,8 +155,17 @@ export function markDemoExhausted(scope = null, retryAfter = null, limit = state
     update({ status: 'exhausted', limit, remaining: 0, scope, retryAt, recheckAt });
 }
 
-export function markDemoUnavailable() {
-    update({ status: 'unavailable', remaining: null, scope: null, retryAt: null, recheckAt: null });
+/**
+ * The demo cannot be used right now. `permanent` means there is no endpoint
+ * on this host (never re-probed); otherwise re-probe per TRANSIENT_BACKOFF_MS.
+ */
+export function markDemoUnavailable({ permanent = false } = {}) {
+    let recheckAt = null;
+    if (!permanent) {
+        recheckAt = Date.now() + backoff(TRANSIENT_BACKOFF_MS, transientStreak);
+        transientStreak += 1;
+    }
+    update({ status: 'unavailable', remaining: null, scope: null, retryAt: null, recheckAt });
 }
 
 /** "~12 min" / "~3 h" until the limit resets, or null when unknown. */

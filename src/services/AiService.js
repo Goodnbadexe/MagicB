@@ -13,6 +13,8 @@ import {
 import {
     DEMO_ENDPOINT,
     applyDemoQuota,
+    isJsonResponse,
+    isMissingEndpoint,
     markDemoExhausted,
     markDemoUnavailable
 } from './demoStatus.js';
@@ -143,18 +145,21 @@ export const AiService = {
             throw new DemoError('failed');
         }
 
-        const isJson = (response.headers.get('content-type') || '').includes('application/json');
-        const data = isJson ? await response.json().catch(() => null) : null;
+        const data = isJsonResponse(response) ? await response.json().catch(() => null) : null;
 
         if (response.status === 429) {
             markDemoExhausted(data?.scope ?? null, data?.retryAfter ?? null);
             throw new DemoError('rate_limited', { scope: data?.scope ?? null, retryAfter: data?.retryAfter ?? null });
         }
-        if (response.status === 503 || response.status === 404 || !data) {
-            markDemoUnavailable();
+        if (response.status === 503) {
+            markDemoUnavailable(); // e.g. owner quota exhausted: re-probed with backoff
             throw new DemoError('unavailable');
         }
-        if (!response.ok) throw new DemoError('failed');
+        if (isMissingEndpoint(response)) {
+            markDemoUnavailable({ permanent: true });
+            throw new DemoError('unavailable');
+        }
+        if (!response.ok || !data) throw new DemoError('failed');
 
         if (data.demo) applyDemoQuota(data.demo);
 
