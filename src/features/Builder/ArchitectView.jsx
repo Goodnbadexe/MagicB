@@ -7,7 +7,7 @@ import { detectLanguage } from '../../core/LanguageDetector';
 import { t } from '../../core/i18n';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import WebsiteBreakdown from './WebsiteBreakdown';
-import { downloadHTML, copyToClipboard, openInNewWindow } from '../../utils/exportUtils';
+import { downloadHTML, copyToClipboard, openInNewWindow, PREVIEW_SANDBOX } from '../../utils/exportUtils';
 import ApiKeyModal from '../../components/ApiKeyModal';
 import { AiService } from '../../services/AiService.js';
 
@@ -49,7 +49,7 @@ export default function ArchitectView({ query, onBack }) {
 
         // Add icon
         const icon = document.createElement('span');
-        icon.innerHTML = type === 'error' ? '✕' : '✓';
+        icon.textContent = type === 'error' ? '✕' : '✓';
         notification.prepend(icon);
 
         document.body.appendChild(notification);
@@ -243,6 +243,7 @@ export default function ArchitectView({ query, onBack }) {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 srcDoc={html}
+                                sandbox={PREVIEW_SANDBOX}
                                 className="w-full h-full border-none"
                                 title="Generated Website"
                             />
