@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // legacy/ is the old prebuilt MagicB bundle kept for reference only; it is
+  // not part of the Vite build (see vite.config.js) and is not maintained.
+  globalIgnores(['dist', 'legacy']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -23,7 +25,10 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // ESLint 9's scope analysis does not count JSX member expressions such as
+      // <motion.div> as references, so framer-motion's lowercase `motion`
+      // namespace is also exempted (capitalised names cover components).
+      'no-unused-vars': ['error', { varsIgnorePattern: '^(?:[A-Z_]|motion$)' }],
     },
   },
 ])
