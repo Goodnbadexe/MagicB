@@ -1,6 +1,5 @@
 
 import { MACROS, ENGINES } from '../config/macros.js';
-import { detectLanguage } from './LanguageDetector.js';
 
 export const COMMAND_Types = {
     REDIRECT: 'REDIRECT',
@@ -141,9 +140,9 @@ export function parseCommand(input) {
 
     // 3. Calculator Check
     // Regex allows numbers, operators, parens, and spaces.
-    const mathRegex = /^[\d\s\+\-\*\/\(\)\.]*$/;
+    const mathRegex = /^[\d\s+\-*/().]*$/;
     // Must contain at least one operator to be a math expression (avoid matching just "2024")
-    const hasOperator = /[\+\-\*\/]/.test(trimmed);
+    const hasOperator = /[+\-*/]/.test(trimmed);
 
     if (hasOperator && mathRegex.test(trimmed)) {
         try {
@@ -157,7 +156,7 @@ export function parseCommand(input) {
                     result: result
                 };
             }
-        } catch (e) {
+        } catch {
             // Ignore syntax errors, just proceed to search
         }
     }

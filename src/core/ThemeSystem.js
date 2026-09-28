@@ -12,7 +12,6 @@
 export function getThemeClasses(theme, colors) {
     const isDark = theme.all.includes('dark');
     const isMinimal = theme.all.includes('minimal');
-    const isColorful = theme.all.includes('colorful');
 
     return {
         bg: isDark ? 'bg-neutral-900' : 'bg-white',
@@ -127,7 +126,6 @@ export function getMacroStyle(macro) {
 
     if (bgColor.type === 'gradient') {
         const colors = bgColor.colors || [];
-        const stops = bgColor.stops || [];
 
         if (bgColor.gradientType === 'radial') {
             return {

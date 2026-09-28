@@ -187,7 +187,7 @@ export async function generateHtml(prompt) {
  * @returns {string} Generated HTML
  */
 function generateParametricHtml(analysis) {
-    const { language, title, theme, colors, category, content, layout, template } = analysis;
+    const { language, title, theme, colors, content, template } = analysis;
     const themeClasses = getThemeClasses(theme, colors);
     const contentTranslations = getContentTranslations(language.code);
 
@@ -207,7 +207,7 @@ function generateParametricHtml(analysis) {
 
     // Build HTML
     const sectionRenderers = {
-        hero: () => generateHeroSection(heroText, description, colors.primary, language, themeClasses),
+        hero: () => generateHeroSection(heroText, description, colors.primary, language),
         features: () => generateFeaturesSection(language, themeClasses, colors.primary),
         services: () => generateFeaturesSection(language, themeClasses, colors.primary),
         about: () => generateAboutSection(language, themeClasses),
@@ -249,7 +249,7 @@ function generateParametricHtml(analysis) {
 <body class="${themeClasses.bg} ${themeClasses.text} min-h-screen flex flex-col ${themeClasses.pattern}">
 
     <!-- Navigation -->
-    ${generateNavigation(siteTitle, colors.primary, language, themeClasses)}
+    ${generateNavigation(siteTitle, colors.primary, language)}
 
     ${sectionsHtml}
 
@@ -270,7 +270,7 @@ function getFallbackSection(section) {
 /**
  * Generate navigation HTML
  */
-function generateNavigation(title, primaryColor, language, themeClasses) {
+function generateNavigation(title, primaryColor, language) {
     const navItems = [
         { key: 'start', href: '#start' },
         { key: 'work', href: '#work' },
@@ -291,7 +291,7 @@ function generateNavigation(title, primaryColor, language, themeClasses) {
 /**
  * Generate hero section HTML
  */
-function generateHeroSection(heroText, description, primaryColor, language, themeClasses) {
+function generateHeroSection(heroText, description, primaryColor, language) {
     const heroImage = getImageUrl(heroText.split(' ')[0] + ' minimal' || 'minimal business');
     return `
     <main class="flex-grow flex flex-col md:flex-row items-center justify-between px-6 mt-10 md:mt-20 max-w-7xl mx-auto gap-12">

@@ -192,7 +192,6 @@ function detectCategory(lower) {
  */
 function extractContentHints(prompt, lower, langCode) {
     const isArabic = langCode === 'ar';
-    const isRTL = ['ar', 'fa'].includes(langCode);
 
     // Hero text based on category
     let heroText = null;
@@ -228,7 +227,6 @@ function extractContentHints(prompt, lower, langCode) {
         description,
         hasContact,
         hasAbout,
-        hasServices,
         hasServices,
         sections: [
             'hero',
@@ -326,7 +324,6 @@ function getDefaultAnalysis() {
             description: 'Crafting digital masterpieces with pixel-perfect precision and aesthetic excellence.',
             hasContact: false,
             hasAbout: false,
-            hasServices: false,
             hasServices: false,
             sections: ['hero', 'features', 'footer']
         },

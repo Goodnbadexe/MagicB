@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import CommandBar from './components/CommandBar';
 import { COMMAND_Types } from './core/CommandParser';
 import { motion, AnimatePresence } from 'framer-motion';

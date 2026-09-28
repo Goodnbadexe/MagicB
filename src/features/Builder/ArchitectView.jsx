@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { generateHtml } from './HtmlGenerator.jsx';
 import { Loader2, CheckCircle2, Layout, ScanSearch, Code2, Lock, Download, Copy, ExternalLink, Share2, ShieldCheck, Send, MessageSquare, Sparkles } from 'lucide-react';
