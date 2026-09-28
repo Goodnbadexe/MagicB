@@ -31,4 +31,12 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^(?:[A-Z_]|motion$)' }],
     },
   },
+  {
+    // Vercel Function (api/), its server-side helpers, tests and tool configs
+    // run on Node.js, not in the browser.
+    files: ['api/**/*.js', 'server/**/*.js', 'tests/**/*.js', '*.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])
