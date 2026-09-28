@@ -119,6 +119,23 @@ export function createDemoHandler(options = {}) {
         const ipKey = `${KEY_PREFIX}:ip:${hashIp(clientIp(request), config.apiKey)}:${window.ipBucket}`;
         const dayKey = `${KEY_PREFIX}:day:${window.day}`;
 
+        /**
+         * What this visitor has left. Whenever nothing is left, say which
+         * limit ran out and when it resets, so clients know when to retry.
+         */
+        function quota(ipCount, dayCount) {
+            const ipLeft = ipLimit - ipCount;
+            const dayLeft = dailyCap - dayCount;
+            const remaining = Math.max(0, Math.min(ipLeft, dayLeft));
+            if (remaining > 0) return { limit: ipLimit, remaining };
+            const daily = dayLeft <= 0;
+            const retryAfter = Math.max(
+                ipLeft <= 0 ? window.ipRetryAfter : 0,
+                daily ? window.dayRetryAfter : 0
+            );
+            return { limit: ipLimit, remaining: 0, reason: daily ? 'daily' : 'ip', retryAfter };
+        }
+
         if (method === 'GET') {
             let counts;
             try {
@@ -128,14 +145,7 @@ export function createDemoHandler(options = {}) {
                 return unavailable();
             }
             const [ipCount, dayCount] = counts;
-            const remaining = Math.max(0, Math.min(ipLimit - ipCount, dailyCap - dayCount));
-            const status = { demo: 'available', limit: ipLimit, remaining };
-            if (remaining === 0) {
-                const daily = dayCount >= dailyCap;
-                status.reason = daily ? 'daily' : 'ip';
-                status.retryAfter = daily ? window.dayRetryAfter : window.ipRetryAfter;
-            }
-            return json(200, status);
+            return json(200, { demo: 'available', ...quota(ipCount, dayCount) });
         }
 
         // ---- POST: validate before spending anything ----
@@ -175,7 +185,6 @@ export function createDemoHandler(options = {}) {
             logger.error('[demo] counter store unavailable:', err?.message || err);
             return unavailable();
         }
-        const remaining = Math.max(0, Math.min(ipLimit - ipCount, dailyCap - dayCount));
 
         // ---- Upstream call ----
         let upstream;
@@ -228,7 +237,7 @@ export function createDemoHandler(options = {}) {
 
         return json(200, {
             candidates: [{ content: { parts: [{ text }] } }],
-            demo: { limit: ipLimit, remaining }
+            demo: quota(ipCount, dayCount)
         });
     }
 

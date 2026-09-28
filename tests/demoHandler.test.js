@@ -239,6 +239,14 @@ describe('per-IP rate limit', () => {
         expect((await handler(post(undefined, { ip: '192.0.2.11' }))).status).toBe(200);
     });
 
+    it('says when the limit resets on the POST that uses the last generation', async () => {
+        const { handler } = setup();
+        for (let i = 0; i < 4; i++) await handler(post());
+        const last = await handler(post());
+        expect(last.status).toBe(200);
+        expect((await last.json()).demo).toEqual({ limit: 5, remaining: 0, reason: 'ip', retryAfter: 50 * 60 });
+    });
+
     it('keys on the first x-forwarded-for hop only', async () => {
         const { handler } = setup();
         for (let i = 0; i < 5; i++) {
@@ -283,6 +291,16 @@ describe('global daily cap', () => {
         const secondsToMidnight = (Date.UTC(2026, 8, 29) - NOW) / 1000;
         expect(await res.json()).toEqual({ error: 'rate_limited', scope: 'daily', retryAfter: secondsToMidnight });
         expect(geminiCalls(fetchMock)).toHaveLength(3);
+    });
+
+    it('reports the daily reset on the POST that reaches the cap', async () => {
+        const { handler } = setup({ env: { DEMO_DAILY_CAP: '2' } });
+        await handler(post(undefined, { ip: '198.51.100.21' }));
+        const last = await handler(post(undefined, { ip: '198.51.100.22' }));
+        expect(last.status).toBe(200);
+        expect((await last.json()).demo).toEqual({
+            limit: 5, remaining: 0, reason: 'daily', retryAfter: (Date.UTC(2026, 8, 29) - NOW) / 1000
+        });
     });
 
     it('defaults to 50 per day (with KV) and ignores invalid values', async () => {

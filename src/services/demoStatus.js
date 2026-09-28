@@ -23,8 +23,16 @@ export const DEMO_ENDPOINT = `${import.meta.env.BASE_URL}api/generate`;
  * @property {number|null} limit      - generations per visitor per window
  * @property {number|null} remaining  - generations this visitor has left
  * @property {'ip'|'daily'|null} scope - which limit ran out (when exhausted)
- * @property {number|null} retryAt    - epoch ms when the limit resets
+ * @property {number|null} retryAt    - epoch ms when the limit resets (if the server said)
+ * @property {number|null} recheckAt  - epoch ms after which ensureDemoStatus() probes again
  */
+
+/**
+ * When an exhausted quota arrives without a reset time, look again after
+ * 60 s, then back off (the last step repeats) so nobody is stuck on
+ * templates forever and nobody hammers the endpoint either.
+ */
+export const UNKNOWN_RESET_BACKOFF_MS = [60_000, 5 * 60_000, 10 * 60_000];
 
 /** @type {DemoState} */
 let state = {
@@ -32,10 +40,16 @@ let state = {
     limit: null,
     remaining: null,
     scope: null,
-    retryAt: null
+    retryAt: null,
+    recheckAt: null
 };
 const listeners = new Set();
 let inflight = null;
+let unknownResetStreak = 0;
+
+function backoff(steps, streak) {
+    return steps[Math.min(streak, steps.length - 1)];
+}
 
 function update(patch) {
     state = { ...state, ...patch };
@@ -57,13 +71,14 @@ export function useDemoStatus() {
 }
 
 /**
- * Resolve the demo state, probing the endpoint when it is not known yet
- * (or when an exhausted limit should have reset by now).
+ * Resolve the demo state, probing the endpoint when it is not known yet or
+ * when a scheduled re-check is due (e.g. an exhausted limit should have
+ * reset by now).
  * @returns {Promise<DemoState>}
  */
 export function ensureDemoStatus() {
-    const limitReset = state.status === 'exhausted' && state.retryAt !== null && Date.now() >= state.retryAt;
-    if (state.status !== 'unknown' && !limitReset) return Promise.resolve(state);
+    const recheckDue = state.recheckAt !== null && Date.now() >= state.recheckAt;
+    if (state.status !== 'unknown' && !recheckDue) return Promise.resolve(state);
     if (!inflight) {
         inflight = probe().finally(() => {
             inflight = null;
@@ -94,26 +109,33 @@ async function probe() {
 /** Record the quota reported by the server (status probe or a generation). */
 export function applyDemoQuota({ limit = null, remaining = 0, reason = null, retryAfter = null }) {
     const left = Math.max(0, Number(remaining) || 0);
-    update({
-        status: left > 0 ? 'available' : 'exhausted',
-        limit,
-        remaining: left,
-        scope: left > 0 ? null : reason,
-        retryAt: left > 0 || !retryAfter ? null : Date.now() + retryAfter * 1000
-    });
+    if (left === 0) {
+        markDemoExhausted(reason, retryAfter, limit);
+        return;
+    }
+    unknownResetStreak = 0;
+    update({ status: 'available', limit, remaining: left, scope: null, retryAt: null, recheckAt: null });
 }
 
-export function markDemoExhausted(scope = null, retryAfter = null) {
-    update({
-        status: 'exhausted',
-        remaining: 0,
-        scope,
-        retryAt: retryAfter ? Date.now() + retryAfter * 1000 : null
-    });
+/**
+ * The visitor has no generations left. With a server-provided reset time,
+ * re-check exactly then; without one, fall back to UNKNOWN_RESET_BACKOFF_MS.
+ */
+export function markDemoExhausted(scope = null, retryAfter = null, limit = state.limit) {
+    const seconds = Number(retryAfter);
+    const retryAt = Number.isFinite(seconds) && seconds > 0 ? Date.now() + seconds * 1000 : null;
+    let recheckAt = retryAt;
+    if (retryAt === null) {
+        recheckAt = Date.now() + backoff(UNKNOWN_RESET_BACKOFF_MS, unknownResetStreak);
+        unknownResetStreak += 1;
+    } else {
+        unknownResetStreak = 0;
+    }
+    update({ status: 'exhausted', limit, remaining: 0, scope, retryAt, recheckAt });
 }
 
 export function markDemoUnavailable() {
-    update({ status: 'unavailable', remaining: null, scope: null, retryAt: null });
+    update({ status: 'unavailable', remaining: null, scope: null, retryAt: null, recheckAt: null });
 }
 
 /** "~12 min" / "~3 h" until the limit resets, or null when unknown. */
