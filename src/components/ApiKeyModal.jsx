@@ -11,11 +11,21 @@ function isValidGeminiKey(value) {
     return { ok: true };
 }
 
-export default function ApiKeyModal({ isOpen, onClose }) {
+/** Why the dialog was opened, shown above the key form. */
+const REASON_COPY = {
+    rate_limited: "You've used the free demo generations. Add your own free Gemini key to keep generating with AI.",
+    unavailable: "The free AI demo isn't available right now. Add your own free Gemini key to generate with AI.",
+    refine: 'Refining a site uses your own Gemini key; the free demo covers first drafts only.'
+};
+
+/**
+ * @param {{ isOpen: boolean, onClose: () => void, reason?: keyof typeof REASON_COPY | null }} props
+ */
+export default function ApiKeyModal({ isOpen, onClose, reason = null }) {
     if (!isOpen) return null;
     // Mounted fresh on every open, so its state is (re)initialised from
     // localStorage without a sync-in-effect.
-    return <ApiKeyDialog onClose={onClose} />;
+    return <ApiKeyDialog onClose={onClose} reason={reason} />;
 }
 
 function readStoredKey() {
@@ -26,7 +36,7 @@ function readStoredKey() {
     }
 }
 
-function ApiKeyDialog({ onClose }) {
+function ApiKeyDialog({ onClose, reason }) {
     const [apiKey, setApiKey] = useState(readStoredKey);
     const [savedKey, setSavedKey] = useState(readStoredKey);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -83,7 +93,7 @@ function ApiKeyDialog({ onClose }) {
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-white">Gemini API Key</h2>
-                            <p className="text-xs text-neutral-300">Unlock full AI generation power</p>
+                            <p className="text-xs text-neutral-300">Optional: unlimited generations and refinements</p>
                         </div>
                     </div>
                     <button
@@ -97,6 +107,12 @@ function ApiKeyDialog({ onClose }) {
                 {/* Content */}
                 <div className="p-6 space-y-6">
 
+                    {reason && REASON_COPY[reason] && (
+                        <p role="status" className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 leading-relaxed">
+                            {REASON_COPY[reason]}
+                        </p>
+                    )}
+
                     {/* Status Banner */}
                     <div className={`p-4 rounded-xl border flex items-start gap-3 ${savedKey ? 'bg-green-500/10 border-green-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
                         <div className={`mt-0.5 ${savedKey ? 'text-green-400' : 'text-blue-400'}`}>
@@ -109,7 +125,7 @@ function ApiKeyDialog({ onClose }) {
                             <p className="text-xs text-neutral-300 mt-1 leading-relaxed">
                                 {savedKey
                                     ? 'Your key is saved locally in your browser. You can now generate unlimited websites using Google Gemini.'
-                                    : 'Get a free API key from Google AI Studio to enable advanced website generation.'}
+                                    : 'MagicB includes a few free demo generations. For unlimited use, get a free API key from Google AI Studio.'}
                             </p>
                             {!savedKey && (
                                 <a

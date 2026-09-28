@@ -3,7 +3,9 @@
  * Generates website HTML from prompts using AI or parametric fallback
  */
 
-import { AiService } from '../../services/AiService';
+import { AiService, DemoError } from '../../services/AiService';
+import { ensureDemoStatus } from '../../services/demoStatus';
+import { looksLikeHtml } from '../../shared/gemini';
 import { analyzePrompt } from '../../core/PromptAnalyzer';
 import { getThemeClasses, generateThemeStyles, getFontFamily } from '../../core/ThemeSystem';
 import { t, getContentTranslations } from '../../core/i18n';
@@ -128,57 +130,77 @@ function clearOldCache() {
 }
 
 /**
- * Generate HTML from prompt
+ * @typedef {Object} GenerationResult
+ * @property {string} html
+ * @property {'byo'|'demo'|'cache'|'template'} source - who produced the HTML
+ * @property {null|{kind: 'rate_limited'|'unavailable'|'demo_failed'|'byo_failed', scope?: string|null, message?: string}} notice
+ *           why AI was not used, so the UI can offer the bring-your-own-key path
+ */
+
+/**
+ * Generate HTML from prompt.
+ *
+ * Order: the visitor's own Gemini key (BYO) if saved -> the free demo
+ * endpoint if available -> the instant parametric template. Only AI output
+ * is cached, so a template shown after a demo limit is never "stuck".
  * @param {string} prompt - User prompt
- * @returns {Promise<string>} Generated HTML
+ * @returns {Promise<GenerationResult>}
  */
 export async function generateHtml(prompt) {
     if (!prompt || typeof prompt !== 'string') {
-        return generateDefaultHtml();
+        return { html: generateDefaultHtml(), source: 'template', notice: null };
     }
 
     // Check cache
     const cacheKey = getCacheKey(prompt);
     const cached = getCachedHtml(cacheKey);
     if (cached) {
-        return cached.html;
+        return { html: cached.html, source: 'cache', notice: null };
     }
 
     // Analyze prompt
     const analysis = analyzePrompt(prompt);
+    let notice = null;
 
-    // Try AI Generation first
-    const apiKey = AiService.getKey();
-    if (apiKey) {
+    if (AiService.getKey()) {
+        // Bring-your-own-key: straight from the browser to Google.
         try {
-            console.log("Generating with AI...");
             const aiHtml = await AiService.generateWebsite(prompt, analysis);
-
-            // Validate HTML before caching
-            if (aiHtml && aiHtml.trim().length > 0 && (aiHtml.includes('<!DOCTYPE') || aiHtml.includes('<html'))) {
-                // Cache the result
+            if (looksLikeHtml(aiHtml)) {
                 saveCachedHtml(cacheKey, aiHtml);
-                return aiHtml;
-            } else {
-                console.warn("AI returned invalid HTML, falling back to parametric");
+                return { html: aiHtml, source: 'byo', notice: null };
             }
+            console.warn("AI returned invalid HTML, falling back to parametric");
+            notice = { kind: 'byo_failed', message: 'The AI response was not a complete page.' };
         } catch (e) {
-            console.error("AI Generation failed, falling back to parametric engine", e);
-            // Show user-friendly error notification
-            if (e.message && !e.message.includes('No API Key')) {
-                console.warn("AI error:", e.message);
+            console.warn("AI generation failed, falling back to parametric engine:", e.message);
+            notice = { kind: 'byo_failed', message: e.message };
+        }
+    } else {
+        // Free demo on the site owner's key (rate limited server-side).
+        const demo = await ensureDemoStatus();
+        if (demo.status === 'available') {
+            try {
+                const aiHtml = await AiService.generateWithDemo(prompt);
+                if (looksLikeHtml(aiHtml)) {
+                    saveCachedHtml(cacheKey, aiHtml);
+                    return { html: aiHtml, source: 'demo', notice: null };
+                }
+                notice = { kind: 'demo_failed' };
+            } catch (e) {
+                notice = e instanceof DemoError && e.code !== 'failed'
+                    ? { kind: e.code, scope: e.scope }
+                    : { kind: 'demo_failed' };
             }
-            // Fallthrough to parametric if AI fails
+        } else if (demo.status === 'exhausted') {
+            notice = { kind: 'rate_limited', scope: demo.scope };
+        } else {
+            notice = { kind: 'unavailable' };
         }
     }
 
-    // Fallback: Parametric Generator
-    const html = generateParametricHtml(analysis);
-
-    // Cache the result
-    saveCachedHtml(cacheKey, html);
-
-    return html;
+    // Fallback: instant parametric template (not cached; it is cheap).
+    return { html: generateParametricHtml(analysis), source: 'template', notice };
 }
 
 /**

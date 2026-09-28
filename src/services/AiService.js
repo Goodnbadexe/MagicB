@@ -10,6 +10,12 @@ import {
     extractText,
     geminiEndpoint
 } from '../shared/gemini.js';
+import {
+    DEMO_ENDPOINT,
+    applyDemoQuota,
+    markDemoExhausted,
+    markDemoUnavailable
+} from './demoStatus.js';
 
 // Bring-your-own-key requests go straight from the browser to Google using
 // the same model id as the server-side demo (see src/shared/gemini.js).
@@ -30,6 +36,20 @@ function geminiHeaders(key) {
 }
 
 /**
+ * Failure of a free-demo generation.
+ * code: 'rate_limited' (429) | 'unavailable' (503/404/no API) | 'failed'
+ */
+export class DemoError extends Error {
+    constructor(code, { scope = null, retryAfter = null } = {}) {
+        super(`Demo generation ${code}`);
+        this.name = 'DemoError';
+        this.code = code;
+        this.scope = scope;
+        this.retryAfter = retryAfter;
+    }
+}
+
+/**
  * Service to handle AI generation request.
  */
 export const AiService = {
@@ -46,6 +66,18 @@ export const AiService = {
      */
     getKey: () => {
         return localStorage.getItem('magicb_ai_key');
+    },
+
+    /**
+     * Whether the visitor saved their own key (bring-your-own-key mode).
+     * Safe when storage is blocked (private mode, sandboxing).
+     */
+    hasKey: () => {
+        try {
+            return !!localStorage.getItem('magicb_ai_key');
+        } catch {
+            return false;
+        }
     },
 
     /**
@@ -89,6 +121,46 @@ export const AiService = {
             console.error("AI Generation Error:", error);
             throw error;
         }
+    },
+
+    /**
+     * Generate website HTML through the free demo endpoint (site owner's key,
+     * rate limited server-side). Only the prompt is sent; the server builds
+     * the full Gemini request itself.
+     * @param {string} prompt - User prompt
+     * @returns {Promise<string>} Generated HTML
+     * @throws {DemoError}
+     */
+    generateWithDemo: async (prompt) => {
+        let response;
+        try {
+            response = await fetch(DEMO_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+        } catch {
+            throw new DemoError('failed');
+        }
+
+        const isJson = (response.headers.get('content-type') || '').includes('application/json');
+        const data = isJson ? await response.json().catch(() => null) : null;
+
+        if (response.status === 429) {
+            markDemoExhausted(data?.scope ?? null, data?.retryAfter ?? null);
+            throw new DemoError('rate_limited', { scope: data?.scope ?? null, retryAfter: data?.retryAfter ?? null });
+        }
+        if (response.status === 503 || response.status === 404 || !data) {
+            markDemoUnavailable();
+            throw new DemoError('unavailable');
+        }
+        if (!response.ok) throw new DemoError('failed');
+
+        if (data.demo) applyDemoQuota(data.demo);
+
+        const generatedText = cleanGeneratedHtml(extractText(data));
+        if (!generatedText) throw new DemoError('failed');
+        return generatedText;
     },
 
     /**

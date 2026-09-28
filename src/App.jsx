@@ -1,17 +1,29 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import CommandBar from './components/CommandBar';
 import { COMMAND_Types } from './core/CommandParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import ArchitectView from './features/Builder/ArchitectView';
 import { ExternalLink, Settings } from 'lucide-react';
 import ApiKeyModal from './components/ApiKeyModal';
+import AiModeBadge from './components/AiModeBadge';
+import { AiService } from './services/AiService';
+import { ensureDemoStatus } from './services/demoStatus';
 
 function App() {
   const [mode, setMode] = useState('COMMAND'); // COMMAND | BUILDER
   const [currentQuery, setCurrentQuery] = useState('');
   const [redirect, setRedirect] = useState(null); // { url: string } | null
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Bumped when a key is saved via the "config" command so the badge updates.
+  const [, setKeyVersion] = useState(0);
+  const hasApiKey = AiService.hasKey();
+
+  // Find out once whether the free demo endpoint is available. The key dialog
+  // is never opened automatically: first-time visitors start in demo mode.
+  useEffect(() => {
+    ensureDemoStatus();
+  }, []);
 
   const handleCommand = (cmd) => {
     if (cmd.type === COMMAND_Types.REDIRECT || cmd.type === COMMAND_Types.SEARCH) {
@@ -27,19 +39,18 @@ function App() {
       setCurrentQuery(cmd.query);
     } else if (cmd.type === COMMAND_Types.CONFIG) {
       // Save the key
-      import('./services/AiService').then(({ AiService }) => {
-        AiService.setKey(cmd.key);
-        // Show success message with animation
-        const notification = document.createElement('div');
-        notification.textContent = "✓ API Key Saved! You can now use AI generation.";
-        notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
-        notification.style.animation = 'fadeIn 0.3s ease-in';
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          notification.style.animation = 'fadeOut 0.3s ease-out';
-          setTimeout(() => document.body.removeChild(notification), 300);
-        }, 3000);
-      });
+      AiService.setKey(cmd.key);
+      setKeyVersion(v => v + 1);
+      // Show success message with animation
+      const notification = document.createElement('div');
+      notification.textContent = "✓ API Key Saved! You can now use AI generation.";
+      notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in';
+      notification.style.animation = 'fadeIn 0.3s ease-in';
+      document.body.appendChild(notification);
+      setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.3s ease-out';
+        setTimeout(() => document.body.removeChild(notification), 300);
+      }, 3000);
     }
   };
 
@@ -100,11 +111,14 @@ function App() {
           />
 
           {mode === 'COMMAND' && (
-            <div className="mt-12 flex gap-4 text-white text-sm">
-              <span>Press <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">yt</kbd> for YouTube</span>
-              <span>•</span>
-              <span>Type <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">build...</kbd> to create</span>
-            </div>
+            <>
+              <div className="mt-12 flex gap-4 text-white text-sm">
+                <span>Press <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">yt</kbd> for YouTube</span>
+                <span>•</span>
+                <span>Type <kbd className="bg-white/20 px-2 py-1 rounded border border-white/30 text-white">build...</kbd> to create</span>
+              </div>
+              <AiModeBadge hasApiKey={hasApiKey} onManageKey={() => setIsSettingsOpen(true)} />
+            </>
           )}
         </motion.div>
 
